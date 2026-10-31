@@ -2,7 +2,7 @@
 
 const CONFIG = {
   // Set to the signed, notarized download (e.g. a GitHub release asset) once the Developer ID is in place.
-  DOWNLOAD_URL: null,
+  DOWNLOAD_URL: "https://github.com/spencerceverett-maker/park/releases/latest/download/Park.zip",
   // TODO: set to the tip page (Buy Me a Coffee or Ko-fi) once the account exists.
   TIP_URL: null,
   REPO_URL: "https://github.com/spencerceverett-maker/park",
