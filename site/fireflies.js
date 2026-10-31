@@ -124,7 +124,7 @@ function compile(gl) {
  * `listen` is the element whose pointer they feel (the host, unless the host doesn't take pointer events).
  * Returns nothing; the field lives as long as the page, pausing whenever the host is off screen.
  */
-export function mountFireflies(host, { still = false, rise = false, density = FIELD.density, look: lookOverrides = {}, listen = host } = {}) {
+export function mountFireflies(host, { still = false, rise = false, density = FIELD.density, look: lookOverrides = {}, listen = host, reach = FIELD.reach, push = FIELD.push } = {}) {
   const L = { ...LOOK, ...lookOverrides };
   const canvas = document.createElement("canvas");
   canvas.className = "fireflies";
@@ -186,7 +186,7 @@ export function mountFireflies(host, { still = false, rise = false, density = FI
     leanX += (lx * FIELD.parallax - leanX) * Math.min(1, dt * 2);
     leanY += (ly * FIELD.parallax - leanY) * Math.min(1, dt * 2);
     const settle = Math.exp(-FIELD.damping * dt);
-    const reach2 = FIELD.reach * FIELD.reach;
+    const reach2 = reach * reach;
     for (let i = 0; i < count; i++) {
       const ix = i * 2, iy = ix + 1;
       let x = pos[ix], y = pos[iy];
@@ -195,8 +195,8 @@ export function mountFireflies(host, { still = false, rise = false, density = FI
       if (pointerOn > 0.01) {
         const dx = x - pointerX, dy = y - pointerY, d2 = dx * dx + dy * dy;
         if (d2 < reach2 && d2 > 1) {
-          const d = Math.sqrt(d2), falloff = (1 - d / FIELD.reach) ** 2;
-          const f = FIELD.push * falloff * pointerOn * dt * depth[i];
+          const d = Math.sqrt(d2), falloff = (1 - d / reach) ** 2;
+          const f = push * falloff * pointerOn * dt * depth[i];
           // Mostly away from the pointer, partly around it.
           vx += (dx / d - (dy / d) * FIELD.swirl) * f;
           vy += (dy / d + (dx / d) * FIELD.swirl) * f;
@@ -209,6 +209,7 @@ export function mountFireflies(host, { still = false, rise = false, density = FI
         // Up from below the edge, swaying on the current; once faded near the top, back in below.
         y -= rate[i] * (0.5 + depth[i]) * dt;
         if (y < 0) { y = H + 10 + Math.random() * 40; x = Math.random() * W; vel[ix] = vel[iy] = 0; }
+        if (x < -30) x += W + 60; else if (x > W + 30) x -= W + 60;
         pos[ix] = x; pos[iy] = y;
         continue;
       }
