@@ -945,6 +945,17 @@ function wireLight() {
   hero.addEventListener("pointerleave", () => aim(0, 0));
 }
 
+/* ---------- Fireflies: the app's first-launch intro, once, gathering on the icon ---------- */
+
+function wireFireflies() {
+  const hero = $(".hero");
+  const icon = $(".hero-icon");
+  if (!hero || !icon || reducedMotion.matches) return;
+  // Only when the page opens on the hero; a reload halfway down shouldn't play it off screen.
+  if (hero.getBoundingClientRect().bottom < window.innerHeight * 0.5) return;
+  import("./fireflies.js").then(({ playFireflies }) => playFireflies(hero, icon)).catch(() => {});
+}
+
 /* ---------- Buttons lean slightly toward the pointer ---------- */
 
 function wireMagnetic() {
@@ -1010,4 +1021,5 @@ wireVideo();
 wireDemo();
 wireReveals();
 wireLight();
+wireFireflies();
 wireMagnetic();

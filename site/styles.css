@@ -197,6 +197,8 @@ button { font: inherit; color: inherit; }
   100% { transform: translate3d(-2%, 3%, 0) scale(0.97); }
 }
 .hero.is-offscreen .light i { animation-play-state: paused; }
+/* The first-launch fireflies: over the sky, under the copy and the Mac. */
+.fireflies { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
 /* Fine grain keeps the sky from banding. */
 .hero::after {
   content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0.22; mix-blend-mode: overlay;
