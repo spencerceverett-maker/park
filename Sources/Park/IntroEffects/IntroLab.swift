@@ -104,7 +104,7 @@ struct IntroLabView: View {
             .padding(.horizontal, 18)
             .padding(.vertical, 14)
         }
-        .frame(width: 440)
+        .frame(width: 460)
         .onAppear { model.refreshAnchor() }
     }
 }
@@ -139,7 +139,8 @@ private struct EffectRow: View {
                     .background(Circle().fill(hovering ? Theme.brand : Theme.brand.opacity(0.1)))
                     .animation(Theme.quick, value: hovering)
             }
-            .padding(10)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(hovering ? Theme.hover : .clear))
             .contentShape(Rectangle())
         }

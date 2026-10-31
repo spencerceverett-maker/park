@@ -6,7 +6,7 @@ import MetalKit
 /// The four candidates for Park's first-launch moment. Each is light drawn over the real screen,
 /// ending on Park's menu bar icon, where the panel (and the guided tour) begins.
 enum IntroEffect: String, CaseIterable, Identifiable {
-    case ripple, dawn, clearing, lanes
+    case ripple, dawn, clearing, lanes, gather, liquid, fireflies, tide, bloom
 
     var id: String { rawValue }
 
@@ -16,6 +16,11 @@ enum IntroEffect: String, CaseIterable, Identifiable {
         case .dawn: return "Dawn"
         case .clearing: return "Clearing"
         case .lanes: return "Lanes"
+        case .gather: return "Gather"
+        case .liquid: return "Liquid"
+        case .fireflies: return "Fireflies"
+        case .tide: return "Tide"
+        case .bloom: return "Bloom"
         }
     }
 
@@ -26,6 +31,11 @@ enum IntroEffect: String, CaseIterable, Identifiable {
         case .dawn: return "Morning light pours down from the menu bar, like the website."
         case .clearing: return "A frosted veil gathers into Park: the gesture of putting things away."
         case .lanes: return "Painted lines settle into a parking bay where the panel opens."
+        case .gather: return "Soft rings of light draw in from the edges and close around Park’s icon."
+        case .liquid: return "A pool of blue light flows across the screen and pours into the icon."
+        case .fireflies: return "Hundreds of tiny lights drift, then gather into a ring around the icon."
+        case .tide: return "A soft wave rolls in from every edge and closes in on Park."
+        case .bloom: return "Watercolor blooms spread, then draw back into Park, as if inhaled."
         }
     }
 
@@ -34,7 +44,7 @@ enum IntroEffect: String, CaseIterable, Identifiable {
         case .ripple: return 2.9
         case .dawn: return 2.9
         case .clearing: return 3.0
-        case .lanes: return 3.0
+        case .lanes, .gather, .liquid, .fireflies, .tide, .bloom: return 3.0
         }
     }
 
@@ -55,6 +65,8 @@ final class IntroRenderer {
     let device: MTLDevice
     let queue: MTLCommandQueue
     private var pipelines: [IntroEffect: MTLRenderPipelineState] = [:]
+    private var motes: MTLRenderPipelineState?
+    static let moteCount = 320
 
     init?(device: MTLDevice? = MTLCreateSystemDefaultDevice()) {
         guard let device, let queue = device.makeCommandQueue() else { return nil }
@@ -74,6 +86,18 @@ final class IntroRenderer {
                 return nil
             }
         }
+        // Fireflies' motes: instanced soft sprites, blended over the screen-wide layer.
+        let moteDescriptor = MTLRenderPipelineDescriptor()
+        moteDescriptor.vertexFunction = library.makeFunction(name: "moteVertex")
+        moteDescriptor.fragmentFunction = library.makeFunction(name: "moteFragment")
+        let attachment = moteDescriptor.colorAttachments[0]!
+        attachment.pixelFormat = .bgra8Unorm
+        attachment.isBlendingEnabled = true
+        attachment.sourceRGBBlendFactor = .one
+        attachment.sourceAlphaBlendFactor = .one
+        attachment.destinationRGBBlendFactor = .oneMinusSourceAlpha
+        attachment.destinationAlphaBlendFactor = .oneMinusSourceAlpha
+        motes = try? device.makeRenderPipelineState(descriptor: moteDescriptor)
         self.device = device
         self.queue = queue
     }
@@ -87,6 +111,11 @@ final class IntroRenderer {
         encoder.setRenderPipelineState(pipeline)
         encoder.setFragmentBytes(&u, length: MemoryLayout<IntroUniforms>.stride, index: 0)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+        if effect == .fireflies, let motes {
+            encoder.setRenderPipelineState(motes)
+            encoder.setVertexBytes(&u, length: MemoryLayout<IntroUniforms>.stride, index: 0)
+            encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: Self.moteCount)
+        }
         encoder.endEncoding()
     }
 
