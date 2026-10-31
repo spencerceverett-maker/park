@@ -224,7 +224,7 @@ export const Panel: React.FC<PanelState> = (s) => {
                 freedOpacity={s.freedOpacity}
                 hovered={s.hoverRow}
                 restorePressed={s.restorePressed}
-                background={s.hoverRow ? undefined : `rgba(0,122,255,${0.14 * s.highlight})`}
+                background={s.hoverRow ? undefined : `rgba(30,80,168,${0.14 * s.highlight})`}
               />
             </div>
           </div>
@@ -238,7 +238,7 @@ export const Panel: React.FC<PanelState> = (s) => {
       {/* Footer */}
       <div style={{ height: pt(40), display: "flex", alignItems: "center", padding: `0 ${pt(8)}px 0 ${pt(16)}px`, gap: pt(8) }}>
         <div style={{ width: pt(44), height: pt(4), borderRadius: pt(2), background: color.hover, position: "relative" }}>
-          <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: pt(44) * fraction, borderRadius: pt(2), background: fraction > 0.75 ? "#FF9500" : "rgba(0,0,0,0.45)" }} />
+          <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: pt(44) * fraction, borderRadius: pt(2), background: "#1E50A8" }} />
         </div>
         <span style={{ flex: 1, fontSize: pt(11.5), color: color.secondary, fontVariantNumeric: "tabular-nums" }}>
           {s.memoryUsed.toFixed(1)} of 16 GB memory used

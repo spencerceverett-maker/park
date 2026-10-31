@@ -82,7 +82,7 @@ const Caption: React.FC<{ frame: number; range: [number, number]; children: Reac
           borderRadius: 999,
           background: "rgba(255,255,255,0.72)",
           backdropFilter: "blur(30px) saturate(150%)",
-          boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.7), 0 12px 32px rgba(20,20,60,0.22)",
+          boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.7), 0 12px 32px rgba(10,22,44,0.22)",
         }}
       >
         {children}
@@ -187,7 +187,7 @@ const Card: React.FC<{ footer?: boolean }> = ({ footer }) => {
   return (
     <AbsoluteFill style={{ background: page.canvas, justifyContent: "center", paddingLeft: 200 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 22, ...rise(6) }}>
-        <Img src={staticFile("park-icon.png")} style={{ width: 84, height: 84 }} />
+        <Img src={staticFile("park-icon.png")} style={{ width: 84, height: 84, borderRadius: "50%", filter: "drop-shadow(0 8px 16px rgba(10,22,44,0.22))" }} />
         <span style={display(34, 600)}>Park for Mac</span>
       </div>
       <div style={{ ...display(128, 600), marginTop: 56, ...rise(14) }}>Put a desktop away.</div>

@@ -2,17 +2,23 @@ import React from "react";
 import { AbsoluteFill, Img, staticFile } from "remotion";
 import { color, font } from "./theme";
 
-/** The same soft color field as the social card: indigo base, blurred blobs, warm at the bottom. */
+/** The website's hero: a Mac desktop just before sunrise, in blues only (hue 211–219°). */
 export const Wallpaper: React.FC = () => {
   const blobs: [number, number, number, string][] = [
-    [0.15, 0.15, 0.55, "#5B6CFF"],
-    [0.75, 0.05, 0.5, "#8A5CF6"],
-    [0.95, 0.65, 0.55, "rgba(46,197,211,0.9)"],
-    [0.35, 0.9, 0.6, "rgba(255,154,123,0.95)"],
-    [0.6, 0.5, 0.35, "rgba(198,184,255,0.7)"],
+    [0.05, 0.0, 0.6, "#0B1B36"],
+    [0.55, 0.2, 0.5, "#163E86"],
+    [0.4, 0.6, 0.45, "#1E50A8"],
+    [0.9, 0.85, 0.5, "#9CC0EA"],
+    [0.45, 1.05, 0.55, "#CFE0F5"],
+    [0.95, 1.05, 0.35, "rgba(227,238,250,0.9)"],
   ];
   return (
-    <AbsoluteFill style={{ background: "#2E2F9E", overflow: "hidden" }}>
+    <AbsoluteFill
+      style={{
+        background: "linear-gradient(172deg, #0B1B36 0%, #163E86 38%, #1E50A8 58%, #9CC0EA 84%, #CFE0F5 100%)",
+        overflow: "hidden",
+      }}
+    >
       <AbsoluteFill style={{ filter: "blur(80px)", scale: "1.15" }}>
         {blobs.map(([x, y, r, c]) => (
           <div
@@ -181,7 +187,7 @@ export const BrowserContent: React.FC = () => (
     <Bar w="82%" mt={14} />
     <div style={{ display: "flex", gap: 18, marginTop: 34 }}>
       {[0, 1, 2].map((i) => (
-        <div key={i} style={{ flex: 1, height: 130, borderRadius: 14, background: ["#e3e8ff", "#e9f7ef", "#fff1e3"][i] }} />
+        <div key={i} style={{ flex: 1, height: 130, borderRadius: 14, background: ["#E3EEFA", "#e9f7ef", "#EEF1F5"][i] }} />
       ))}
     </div>
     <Bar w="70%" mt={34} />
@@ -247,7 +253,7 @@ export const FigmaContent: React.FC = () => (
             boxSizing: "border-box",
           }}
         >
-          <div style={{ width: 54, height: 54, borderRadius: 14, background: ["#5b6bff", "#22c55e", "#f59e0b"][i] }} />
+          <div style={{ width: 54, height: 54, borderRadius: 14, background: ["#1E50A8", "#22c55e", "#9CC0EA"][i] }} />
           <Bar w="80%" h={14} c="rgba(0,0,0,0.75)" mt={22} />
           <Bar w="92%" h={10} mt={14} />
           <Bar w="70%" h={10} mt={10} />
@@ -260,7 +266,7 @@ export const FigmaContent: React.FC = () => (
 
 export const TerminalContent: React.FC = () => {
   const lines: [string, string][] = [
-    ["~/Developer/api-server", "#7aa2ff"],
+    ["~/Developer/api-server", "#9CC0EA"],
     ["❯ npm run dev", "rgba(255,255,255,0.92)"],
     ["", ""],
     ["  ▲ Ready on http://localhost:3000", "#7ee2a8"],
