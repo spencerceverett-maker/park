@@ -4,3 +4,5 @@ build/
 scripts/signing.local
 video/node_modules
 video/out
+.vercel
+.env*
