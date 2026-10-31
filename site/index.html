@@ -66,7 +66,7 @@
         <div class="screen">
           <div class="display">
             <div class="mac-bar">
-              <span class="mac-menus" aria-hidden="true"><span class="mac-bar-app">Finder</span><span>File</span><span>Edit</span><span>View</span><span class="hide-sm">Go</span><span class="hide-sm">Window</span></span>
+              <div class="mac-menus" role="menubar" aria-label="Menu bar of the example Mac" data-menubar><button type="button" class="mb-item mb-apple" role="menuitem" aria-haspopup="menu" aria-expanded="false" data-menu="apple" tabindex="0" aria-label="Apple menu"><svg viewBox="0 0 14 17" width="12" height="14" aria-hidden="true"><path fill="currentColor" d="M11.6 9c0-2 1.6-2.9 1.7-3a3.7 3.7 0 0 0-2.9-1.6c-1.2-.1-2.4.7-3 .7s-1.6-.7-2.6-.7A3.9 3.9 0 0 0 1.5 6.4C.1 8.8 1.1 12.4 2.5 14.4c.7 1 1.5 2 2.5 2s1.4-.6 2.6-.6 1.5.6 2.6.6 1.8-1 2.4-2a8.4 8.4 0 0 0 1.1-2.3A3.4 3.4 0 0 1 11.6 9ZM9.6 3.1A3.4 3.4 0 0 0 10.4.6a3.5 3.5 0 0 0-2.3 1.2 3.2 3.2 0 0 0-.8 2.4 2.9 2.9 0 0 0 2.3-1.1Z"/></svg></button><button type="button" class="mb-item mac-bar-app" role="menuitem" aria-haspopup="menu" aria-expanded="false" data-menu="finder" tabindex="-1">Finder</button><button type="button" class="mb-item" role="menuitem" aria-haspopup="menu" aria-expanded="false" data-menu="file" tabindex="-1">File</button><button type="button" class="mb-item" role="menuitem" aria-haspopup="menu" aria-expanded="false" data-menu="edit" tabindex="-1">Edit</button><button type="button" class="mb-item" role="menuitem" aria-haspopup="menu" aria-expanded="false" data-menu="view" tabindex="-1">View</button><button type="button" class="mb-item hide-sm" role="menuitem" aria-haspopup="menu" aria-expanded="false" data-menu="go" tabindex="-1">Go</button><button type="button" class="mb-item hide-sm" role="menuitem" aria-haspopup="menu" aria-expanded="false" data-menu="window" tabindex="-1">Window</button><button type="button" class="mb-item hide-sm" role="menuitem" aria-haspopup="menu" aria-expanded="false" data-menu="help" tabindex="-1">Help</button></div>
               <span class="mac-bar-right">
                 <button class="status-icon" type="button" aria-label="Park menu" aria-expanded="true" aria-controls="park-panel" data-toggle-panel >
                   <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="10" cy="10" r="8.1" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 14.2V5.9h2.7c1.75 0 2.85 1 2.85 2.55S12.45 11 10.7 11H8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
@@ -76,10 +76,12 @@
                 <span class="hide-sm" aria-hidden="true" data-clock>Sat 9:41 AM</span>
               </span>
             </div>
+            <div class="menu-layer" data-menu-layer></div>
+            <div class="sleep" data-sleep aria-hidden="true"></div>
             <div class="desk" aria-label="Example desktop with three windows" data-desk>
-              <div class="win win-browser" data-win aria-hidden="true">
+              <div class="win win-browser" data-win data-drag data-app="browser" data-mem="1.1" data-title="Onboarding research" aria-hidden="true">
                 <div class="win-bar">
-                  <i class="lights"><b></b><b></b><b></b></i>
+                  <span class="lights" data-lights><button type="button" class="tl l-close" data-close tabindex="-1" aria-label="Close Onboarding research"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="m3.2 3.2 3.6 3.6M6.8 3.2 3.2 6.8"/></svg></button><button type="button" class="tl l-min" data-minimize tabindex="-1" aria-label="Minimize Onboarding research"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.7 5h4.6"/></svg></button><button type="button" class="tl l-zoom" data-zoom tabindex="-1" aria-label="Zoom Onboarding research"><svg viewBox="0 0 10 10" aria-hidden="true"><path class="fill" d="M3 7V3.4L6.6 7zM7 3v3.6L3.4 3z"/></svg></button></span>
                   <span class="tab is-active">Onboarding research</span><span class="tab">Q4 plan</span>
                 </div>
                 <div class="url">docs.example.com/onboarding</div>
@@ -91,9 +93,9 @@
                 </div>
               </div>
 
-              <div class="win win-figma" data-win aria-hidden="true">
+              <div class="win win-figma" data-win data-drag data-app="figma" data-mem="0.8" data-title="Onboarding redesign" aria-hidden="true">
                 <div class="win-bar dark">
-                  <i class="lights"><b></b><b></b><b></b></i>
+                  <span class="lights" data-lights><button type="button" class="tl l-close" data-close tabindex="-1" aria-label="Close Onboarding redesign"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="m3.2 3.2 3.6 3.6M6.8 3.2 3.2 6.8"/></svg></button><button type="button" class="tl l-min" data-minimize tabindex="-1" aria-label="Minimize Onboarding redesign"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.7 5h4.6"/></svg></button><button type="button" class="tl l-zoom" data-zoom tabindex="-1" aria-label="Zoom Onboarding redesign"><svg viewBox="0 0 10 10" aria-hidden="true"><path class="fill" d="M3 7V3.4L6.6 7zM7 3v3.6L3.4 3z"/></svg></button></span>
                   <span class="title">Onboarding redesign</span>
                 </div>
                 <div class="canvas">
@@ -103,9 +105,9 @@
                 </div>
               </div>
 
-              <div class="win win-term" data-win aria-hidden="true">
+              <div class="win win-term" data-win data-drag data-app="warp" data-mem="0.4" data-title="api-server" aria-hidden="true">
                 <div class="win-bar dark">
-                  <i class="lights"><b></b><b></b><b></b></i>
+                  <span class="lights" data-lights><button type="button" class="tl l-close" data-close tabindex="-1" aria-label="Close api-server"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="m3.2 3.2 3.6 3.6M6.8 3.2 3.2 6.8"/></svg></button><button type="button" class="tl l-min" data-minimize tabindex="-1" aria-label="Minimize api-server"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.7 5h4.6"/></svg></button><button type="button" class="tl l-zoom" data-zoom tabindex="-1" aria-label="Zoom api-server"><svg viewBox="0 0 10 10" aria-hidden="true"><path class="fill" d="M3 7V3.4L6.6 7zM7 3v3.6L3.4 3z"/></svg></button></span>
                   <span class="title">api-server</span>
                 </div>
                 <pre><span class="dim">~/Developer/api-server</span>
@@ -113,6 +115,20 @@
   <span class="ok">▲ Ready</span> on localhost:3000
   ✓ Compiled in 412 ms
   GET /api/plans <span class="ok">200</span> in 18 ms</pre>
+              </div>
+              <div class="win win-about is-closed" data-drag data-about data-title="About This Mac" aria-hidden="true">
+                <div class="win-bar plain"><span class="lights" data-lights><button type="button" class="tl l-close" data-close tabindex="-1" aria-label="Close About This Mac"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="m3.2 3.2 3.6 3.6M6.8 3.2 3.2 6.8"/></svg></button><button type="button" class="tl l-min" data-minimize tabindex="-1" aria-label="Minimize About This Mac"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.7 5h4.6"/></svg></button><button type="button" class="tl l-zoom" data-zoom tabindex="-1" aria-label="Zoom About This Mac"><svg viewBox="0 0 10 10" aria-hidden="true"><path class="fill" d="M3 7V3.4L6.6 7zM7 3v3.6L3.4 3z"/></svg></button></span></div>
+                <div class="about">
+                  <svg class="about-mac" viewBox="0 0 64 44" aria-hidden="true"><defs><linearGradient id="about-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#163e86"/><stop offset=".62" stop-color="#1e50a8"/><stop offset="1" stop-color="#9cc0ea"/></linearGradient></defs><rect x="9" y="3" width="46" height="31" rx="3" fill="#1d1d1f"/><rect x="11.5" y="5.5" width="41" height="26" rx="1.5" fill="url(#about-sky)"/><path d="M2 35.5h60l-3.2 4.3H5.2z" fill="#c7c7cc"/></svg>
+                  <p class="about-name">MacBook Pro</p>
+                  <p class="about-sub">14-inch, one desktop too many</p>
+                  <dl class="about-specs">
+                    <div><dt>Memory</dt><dd data-about-memory>13.1 GB of 16 GB in use</dd></div>
+                    <div><dt>Desktops</dt><dd data-about-desktops>4, all of them open</dd></div>
+                    <div><dt>Serial number</dt><dd>P4RK-1T-L8R</dd></div>
+                  </dl>
+                  <button type="button" class="about-more" data-about-more tabindex="-1">More Info…</button>
+                </div>
               </div>
             </div>
           </div>
@@ -261,15 +277,16 @@
     <section class="section details" aria-labelledby="details-title">
       <div class="wrap">
         <h2 id="details-title">The small things, done right.</h2>
+        <!-- Icons: Lucide (https://lucide.dev), ISC License, Copyright (c) Lucide Contributors. -->
         <ul class="detail-list">
-          <li><span class="glyph g-blue"><svg viewBox="0 0 20 20"><path d="M10 2.5a7.5 7.5 0 1 0 7.5 7.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M10 6v4.2l2.8 1.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="m14.6 2.7 3 .1-.1 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><strong>Survives restarts.</strong> Parked desktops are saved to disk the moment you park.</span></li>
-          <li><span class="glyph g-indigo"><svg viewBox="0 0 20 20"><rect x="2.5" y="4" width="15" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 17.5h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><span><strong>Opens at login.</strong> It's always in your menu bar, so you never forget it's there.</span></li>
-          <li><span class="glyph g-green"><svg viewBox="0 0 20 20"><path d="M3 13.5h3.5l2-6 3 9 2-5H17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><strong>Shows memory freed.</strong> Every parked desktop tells you how much it gave back.</span></li>
-          <li><span class="glyph g-orange"><svg viewBox="0 0 20 20"><path d="M10 3 2.8 15.5h14.4L10 3Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M10 8.2v3.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="10" cy="13.6" r="1" fill="currentColor"/></svg></span><span><strong>Warns before it stops anything.</strong> You'll know if a terminal is still running a command.</span></li>
-          <li><span class="glyph g-gray"><svg viewBox="0 0 20 20"><path d="M7 5.5H4.5v2.5M4.5 5.5l3.2 3.2A5.5 5.5 0 1 1 6 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><strong>Put back.</strong> For ten minutes after a restore, one click returns it to your list.</span></li>
-          <li><span class="glyph g-teal"><svg viewBox="0 0 20 20"><path d="M10 2.8 4 5.2v4.3c0 3.7 2.6 6.6 6 7.7 3.4-1.1 6-4 6-7.7V5.2L10 2.8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span><span><strong>Never closes what it can't bring back.</strong> Anything it can't read exactly stays open.</span></li>
-          <li><span class="glyph g-purple"><svg viewBox="0 0 20 20"><rect x="4" y="9" width="12" height="8.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6.8 9V6.5a3.2 3.2 0 0 1 6.4 0V9" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></span><span><strong>Stays on your Mac.</strong> No account, no server, no analytics. Incognito windows are never saved.</span></li>
-          <li><span class="glyph g-ink"><svg viewBox="0 0 20 20"><path d="m7 6-4 4 4 4M13 6l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><strong>Open source.</strong> MIT licensed. Read every line, or build it yourself.</span></li>
+          <li><span class="glyph g-blue"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg></span><span><strong>Survives restarts.</strong> Parked desktops are saved to disk the moment you park.</span></li>
+          <li><span class="glyph"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/></svg></span><span><strong>Opens at login.</strong> It's always in your menu bar, so you never forget it's there.</span></li>
+          <li><span class="glyph"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 19v-3"/><path d="M10 19v-3"/><path d="M14 19v-3"/><path d="M18 19v-3"/><path d="M8 11V9"/><path d="M16 11V9"/><path d="M12 11V9"/><path d="M2 15h20"/><path d="M2 7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v1.1a2 2 0 0 0 0 3.837V17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5.1a2 2 0 0 0 0-3.837Z"/></svg></span><span><strong>Shows memory freed.</strong> Every parked desktop tells you how much it gave back.</span></li>
+          <li><span class="glyph"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span><span><strong>Warns before it stops anything.</strong> You'll know if a terminal is still running a command.</span></li>
+          <li><span class="glyph"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg></span><span><strong>Put back.</strong> For ten minutes after a restore, one click returns it to your list.</span></li>
+          <li><span class="glyph"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></span><span><strong>Never closes what it can't bring back.</strong> Anything it can't read exactly stays open.</span></li>
+          <li><span class="glyph"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span><span><strong>Stays on your Mac.</strong> No account, no server, no analytics. Incognito windows are never saved.</span></li>
+          <li><span class="glyph"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg></span><span><strong>Open source.</strong> MIT licensed. Read every line, or build it yourself.</span></li>
         </ul>
       </div>
     </section>
@@ -289,7 +306,7 @@
       </div>
     </section>
 
-    <section class="section faq" aria-labelledby="faq-title">
+    <section class="section faq" id="faq" aria-labelledby="faq-title">
       <div class="wrap faq-inner">
         <h2 id="faq-title">Questions</h2>
         <details>

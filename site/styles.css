@@ -26,6 +26,7 @@
 
   /* Park's panel, matching Sources/Park/UI (macOS popover material, label colors, system blue). */
   --p-bg: rgba(246, 246, 248, 0.72);
+  --m-bg: rgba(246, 246, 248, 0.88); /* menus are frostier than the panel, as on macOS */
   --p-solid: #f2f2f4;
   --p-ink: #1d1d1f;
   --p-ink-2: rgba(60, 60, 67, 0.62);
@@ -71,6 +72,7 @@
     --first-light: #8fb0de;
 
     --p-bg: rgba(38, 38, 42, 0.72);
+    --m-bg: rgba(40, 40, 44, 0.9);
     --p-solid: #2a2a2e;
     --p-ink: #f5f5f7;
     --p-ink-2: rgba(235, 235, 245, 0.62);
@@ -271,8 +273,17 @@ button { font: inherit; color: inherit; }
   background: rgba(255, 255, 255, 0.16);
   -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
 }
-.mac-menus { display: flex; gap: 18px; }
+.mac-menus { display: flex; align-items: center; gap: 2px; margin-left: -8px; }
 .mac-bar-app { font-weight: 700; }
+/* Menu titles: like macOS, the open one gets a soft pill behind it. No animation; menus are used constantly. */
+.mb-item {
+  height: 22px; padding: 0 8px; border: 0; border-radius: 5px;
+  font: inherit; color: inherit; background: transparent; cursor: default;
+  display: inline-flex; align-items: center;
+}
+.mb-item:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.85); outline-offset: -2px; }
+.mb-item[aria-expanded="true"] { background: rgba(255, 255, 255, 0.26); }
+.mb-apple { padding: 0 9px 1px; }
 .mac-bar-right { display: flex; align-items: center; gap: 14px; margin-left: auto; font-variant-numeric: tabular-nums; }
 .status-icon {
   display: grid; place-items: center; width: 30px; height: 22px; padding: 0;
@@ -308,13 +319,111 @@ button { font: inherit; color: inherit; }
 .win-figma { left: 24%; top: 24%; width: 44%; height: 54%; z-index: 2; background: #1e1e20; color: #fff; }
 .win-term { left: 8%; top: 58%; width: 38%; height: 34%; z-index: 3; background: #1b1b1f; color: #e6e6ea; }
 
+/* ---------- The little Mac behaves like one: drag, focus, traffic lights, menus ---------- */
+
+/* Windows keep their own stacking inside the desktop, below the menus. */
+.desk { z-index: 1; isolation: isolate; }
+
+/* The title bar is the drag handle. Only there do we take over touch, so the page still scrolls. */
+.win-bar { touch-action: none; cursor: default; user-select: none; -webkit-user-select: none; }
+.win.is-dragging { box-shadow: 0 2.2em 4.6em rgba(var(--shadow), 0.36), 0 0 0 0.5px rgba(0, 0, 0, 0.2); }
+.win { transition: transform 640ms var(--spring), opacity 160ms ease, box-shadow 180ms ease; }
+
+/* Unfocused windows, as on macOS: grey lights, quieter title. */
+.win:not(.is-focused) .tl { background: #d1d1d6; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12); }
+.win:not(.is-focused) .win-bar .title, .win:not(.is-focused) .win-bar .tab { opacity: 0.55; }
+.win-bar.dark .tl { box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.25); }
+.win:not(.is-focused) .win-bar.dark .tl { background: #4a4a4f; }
+
+.lights { display: flex; gap: 0.45em; margin-right: 0.4em; }
+.tl {
+  position: relative; display: grid; place-items: center;
+  width: 0.95em; height: 0.95em; padding: 0; border: 0; border-radius: 50%;
+  background: #ff5f57; color: rgba(0, 0, 0, 0.55); cursor: default;
+}
+.tl::after { content: ""; position: absolute; inset: -0.25em; border-radius: 50%; } /* a slightly larger hit area */
+.l-min { background: #febc2e; }
+.l-zoom { background: #28c840; }
+.tl svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; opacity: 0; }
+.tl svg .fill { fill: currentColor; stroke: none; }
+.lights:hover .tl svg { opacity: 1; }
+.win:not(.is-focused) .lights:hover .tl { background: #ff5f57; }
+.win:not(.is-focused) .lights:hover .l-min { background: #febc2e; }
+.win:not(.is-focused) .lights:hover .l-zoom { background: #28c840; }
+.tl:active { filter: brightness(0.82); }
+
+/* Closing: a quick scale-fade, from the window's middle. Reopening reverses it. */
+.win.is-closed, .win.is-minimized, .win.is-opening { transform-origin: 50% 50%; }
+.win.is-closed {
+  transform: scale(0.94); opacity: 0; visibility: hidden; pointer-events: none;
+  transition: transform 200ms var(--ease-out), opacity 160ms ease, visibility 0s linear 200ms;
+}
+/* Minimizing: down toward where the Dock would be. */
+.win.is-minimized {
+  transform-origin: 50% 100%;
+  transform: translateY(42%) scale(0.14); opacity: 0; visibility: hidden; pointer-events: none;
+  transition: transform 420ms cubic-bezier(0.77, 0, 0.175, 1), opacity 260ms ease 140ms, visibility 0s linear 420ms;
+}
+.win.is-opening { transition: transform 260ms var(--ease-out), opacity 180ms ease; }
+.win.is-unminimizing { transform-origin: 50% 100%; transition: transform 420ms cubic-bezier(0.77, 0, 0.175, 1), opacity 200ms ease; }
+
+/* About This Mac */
+.win-about { left: 34%; top: 14%; width: 30%; height: auto; z-index: 4; background: var(--p-solid); color: var(--p-ink); }
+.win-bar.plain { background: transparent; height: 2.2em; }
+.about { display: grid; justify-items: center; gap: 0.15em; padding: 0.4em 1.6em 1.5em; text-align: center; }
+.about-mac { width: 5.4em; height: auto; margin-bottom: 0.6em; }
+.about-name { margin: 0; font-size: 1.35em; font-weight: 700; letter-spacing: -0.01em; }
+.about-sub { margin: 0 0 0.9em; font-size: 0.86em; color: var(--p-ink-2); }
+.about-specs { display: grid; gap: 0.35em; margin: 0 0 1.1em; font-size: 0.8em; }
+.about-specs div { display: grid; grid-template-columns: 7.2em 1fr; gap: 0.8em; text-align: left; }
+.about-specs dt { color: var(--p-ink-2); text-align: right; }
+.about-specs dd { margin: 0; font-variant-numeric: tabular-nums; }
+.about-more {
+  font: inherit; font-size: 0.8em; padding: 0.3em 1em; border-radius: 0.5em; border: 0;
+  background: var(--p-hover); color: inherit; box-shadow: inset 0 0 0 0.5px var(--p-edge);
+}
+.about-more:active { transform: scale(0.97); }
+
+/* Sleep: the screen goes dark; any click or key wakes it. */
+.sleep { position: absolute; inset: 0; z-index: 9; background: #000; opacity: 0; pointer-events: none; transition: opacity 700ms ease; }
+.sleep.is-on { opacity: 0.94; pointer-events: auto; cursor: default; }
+
+/* ---------- Menus: macOS 26 style, frosted, blue selection ---------- */
+
+.menu-layer { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+.mac-menu {
+  position: absolute; top: 31px; min-width: 210px; padding: 5px;
+  border-radius: 10px; font-size: 13px; line-height: 1; letter-spacing: -0.006em;
+  color: var(--p-ink); background: var(--m-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(30px); backdrop-filter: saturate(180%) blur(30px);
+  box-shadow: 0 0 0 0.5px var(--p-edge) inset, 0 0 0 0.5px rgba(0, 0, 0, 0.16), 0 12px 32px rgba(var(--shadow), 0.26);
+  pointer-events: auto; text-align: left;
+  /* Appears instantly, like a real menu; closing fades fast. */
+}
+.mac-menu:focus { outline: none; }
+.mac-menu.is-leaving { opacity: 0; transition: opacity 140ms ease; pointer-events: none; }
+.mi {
+  display: flex; align-items: center; gap: 10px; width: 100%; height: 22px; padding: 0 10px 0 22px;
+  border: 0; border-radius: 6px; font: inherit; color: inherit; background: transparent; text-align: left; cursor: default;
+  position: relative; white-space: nowrap;
+}
+.mi:focus { outline: none; }
+.mi:not([aria-disabled="true"]):hover, .mi:not([aria-disabled="true"]):focus-visible, .mi.is-active { background: var(--blue); color: #fff; }
+.mi[aria-disabled="true"] { color: var(--p-ink-3); }
+.mi kbd {
+  margin-left: auto; padding: 0 0 0 18px; min-width: 0; height: auto; border: 0; border-radius: 0;
+  background: none; box-shadow: none; font: inherit; color: var(--p-ink-3); letter-spacing: 0.04em;
+}
+.mi:not([aria-disabled="true"]):hover kbd, .mi.is-active kbd, .mi:focus-visible kbd { color: rgba(255, 255, 255, 0.8); }
+.mi[aria-checked="true"]::before { content: "✓"; position: absolute; left: 8px; font-size: 11px; }
+.mi-dot::before { content: "◆"; position: absolute; left: 8px; font-size: 8px; }
+.mac-menu hr { height: 1px; margin: 5px 10px; border: 0; background: var(--p-hair); }
+.mac-menu .mi-search { padding: 4px 6px 6px; }
+.mac-menu .mi-search span { display: block; height: 22px; padding: 0 8px; line-height: 22px; border-radius: 6px; color: var(--p-ink-3); background: var(--p-hover); box-shadow: inset 0 0 0 0.5px var(--p-edge); }
+
 .win-bar { display: flex; align-items: center; gap: 0.7em; height: 2.4em; padding: 0 0.9em; background: #ececf0; font-size: 0.8em; }
 .win-bar.dark { background: #2a2a2e; color: rgba(255, 255, 255, 0.8); }
 .win-bar .title { font-weight: 600; }
-.lights { display: flex; gap: 0.45em; margin-right: 0.4em; }
-.lights b { width: 0.95em; height: 0.95em; border-radius: 50%; background: #ff5f57; }
-.lights b:nth-child(2) { background: #febc2e; }
-.lights b:nth-child(3) { background: #28c840; }
 .tab { padding: 0.25em 0.8em; border-radius: 0.5em; color: #6e6e73; white-space: nowrap; }
 .tab.is-active { background: #fff; color: #1d1d1f; font-weight: 600; box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.12); }
 
@@ -529,7 +638,8 @@ kbd {
 .detail-list li { display: flex; gap: 14px; align-items: flex-start; font-size: 16px; line-height: 1.45; color: var(--ink-2); }
 .detail-list strong { color: var(--ink); font-weight: 600; }
 .glyph { display: grid; place-items: center; flex: none; width: 30px; height: 30px; margin-top: -2px; border-radius: 50%; color: #fff; }
-.glyph svg { width: 17px; height: 17px; }
+/* Icons are Lucide (ISC); each sets its own optical size via width/height. */
+.glyph svg { display: block; flex: none; }
 .glyph { background: var(--glyph); }
 .g-blue { background: var(--blue); }
 
@@ -645,8 +755,13 @@ kbd {
   .lede { font-size: 19px; }
   .hero-icon { width: 48px; height: 48px; margin-bottom: 20px; }
   .nav-inner { padding-left: 14px; }
-  .mac-bar { gap: 12px; font-size: 12px; }
-  .mac-menus { gap: 12px; }
+  .mac-bar { gap: 8px; font-size: 12px; }
+  .mac-menus { gap: 0; margin-left: -6px; }
+  .mb-item { padding: 0 6px; }
+  .mac-menu { min-width: 0; font-size: 12px; padding: 4px; }
+  .mi { height: 20px; padding-left: 21px; }
+  .mi[aria-checked="true"]::before, .mi-dot::before { left: 7px; }
+  .mi kbd { display: none; }
   .wrap { padding: 0 20px; }
   .section h2 { font-size: 32px; }
   .section-lede { font-size: 19px; }
@@ -658,13 +773,16 @@ kbd {
   html { scroll-behavior: auto; }
   .light i { animation: none; }
   .js .split .word, .js .fade { opacity: 1; transform: none; filter: none; transition: none; }
-  .win, .win.is-parked { transition: opacity 200ms ease; }
-  .win.is-parked { transform: none; }
+  .win, .win.is-parked, .win.is-closed, .win.is-minimized, .win.is-opening, .win.is-unminimizing { transition: opacity 200ms ease, visibility 0s linear 200ms; }
+  .win.is-parked, .win.is-closed, .win.is-minimized { transform: none; }
+  .sleep { transition-duration: 1ms; }
   .p-row-wrap, .meter-fill, .meter, .toast, .panel, .faq summary::after { transition-duration: 1ms; }
 }
 
 /* ?reduced in the URL forces the reduced-motion experience, for testing. */
 .reduce-motion .light i { animation: none; }
+.reduce-motion .win, .reduce-motion .win.is-parked, .reduce-motion .win.is-closed, .reduce-motion .win.is-minimized, .reduce-motion .win.is-opening, .reduce-motion .win.is-unminimizing { transition: opacity 200ms ease, visibility 0s linear 200ms !important; }
+.reduce-motion .win.is-parked, .reduce-motion .win.is-closed, .reduce-motion .win.is-minimized { transform: none !important; }
 .reduce-motion .split .word, .reduce-motion .fade { opacity: 1 !important; transform: none !important; filter: none !important; transition: none !important; }
 
 @media (prefers-reduced-transparency: reduce) {
