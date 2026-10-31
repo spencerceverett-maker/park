@@ -9,6 +9,29 @@ enum Snapshot {
 
     static func render(to path: String, arguments: [String]) {
         let dark = arguments.contains("--dark")
+        // --intro-frame=<seconds> draws one frame of the first-launch light over a sample desktop.
+        if let flag = arguments.first(where: { $0.hasPrefix("--intro-frame=") }),
+           let t = Double(flag.dropFirst("--intro-frame=".count)) {
+            renderIntroFrame(at: t, to: path)
+            return
+        }
+        // --onboarding=move|practice|practice-parked|practice-restored|access|access-granted|try|try-done
+        if let flag = arguments.first(where: { $0.hasPrefix("--onboarding=") }) {
+            let name = String(flag.dropFirst("--onboarding=".count))
+            let step: OnboardingView.Step = switch name {
+            case "move": .move
+            case "access", "access-granted": .access
+            case "try", "try-done": .tryIt
+            default: .practice
+            }
+            let practice: PracticeDesk.Phase = name == "practice-parked" ? .parked : name == "practice-restored" ? .restored : .ready
+            let view = OnboardingView(step: step, includesMove: true,
+                                      granted: name == "access-granted" ? true : (name == "access" ? false : nil),
+                                      practice: practice, opened: name == "try-done")
+            write(view.background(Color(nsColor: dark ? NSColor(white: 0.15, alpha: 1) : .windowBackgroundColor))
+                    .environment(\.colorScheme, dark ? .dark : .light), to: path, scale: 2, opaque: true)
+            return
+        }
         let store = SpotStore(fileURL: FileManager.default.temporaryDirectory.appendingPathComponent("park-snapshot-\(UUID()).json"))
         if !arguments.contains("--empty") {
             for spot in sampleSpots.reversed() { store.insert(spot) }
@@ -31,9 +54,35 @@ enum Snapshot {
             .background(clear ? Color.clear : Color(nsColor: dark ? NSColor(white: 0.16, alpha: 1) : NSColor(white: 0.97, alpha: 1)))
             .environment(\.colorScheme, dark ? .dark : .light)
 
+        write(view, to: path, scale: arguments.contains("--3x") ? 3 : 2, opaque: !clear)
+    }
+
+    private static func renderIntroFrame(at t: Double, to path: String) {
+        let size = CGSize(width: 1512, height: 982)
+        guard let renderer = IntroLight.Renderer(), let light = renderer.frame(at: t, size: size) else {
+            print("intro light unavailable"); return
+        }
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width), pixelsHigh: Int(size.height),
+                                   bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                   colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        let ctx = NSGraphicsContext.current!.cgContext
+        // A stand-in desktop: a light, neutral wallpaper with a couple of windows, so the veil and beams read.
+        NSGradient(colors: [NSColor(white: 0.86, alpha: 1), NSColor(white: 0.72, alpha: 1)])!.draw(in: CGRect(origin: .zero, size: size), angle: -90)
+        for r in [CGRect(x: 120, y: 260, width: 560, height: 420), CGRect(x: 820, y: 180, width: 520, height: 380)] {
+            NSColor(white: 0.97, alpha: 1).setFill(); NSBezierPath(roundedRect: r, xRadius: 12, yRadius: 12).fill()
+        }
+        ctx.draw(light, in: CGRect(origin: .zero, size: size))
+        NSGraphicsContext.restoreGraphicsState()
+        try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+        print("wrote \(path)")
+    }
+
+    private static func write(_ view: some View, to path: String, scale: CGFloat, opaque: Bool) {
         let renderer = ImageRenderer(content: view)
-        renderer.scale = arguments.contains("--3x") ? 3 : 2
-        renderer.isOpaque = !clear
+        renderer.scale = scale
+        renderer.isOpaque = opaque
         guard let image = renderer.nsImage,
               let tiff = image.tiffRepresentation,
               let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else {

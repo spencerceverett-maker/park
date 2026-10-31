@@ -39,6 +39,8 @@ struct IconStack: View {
 
 /// The filled accent button used for the single primary action.
 struct PrimaryButtonStyle: ButtonStyle {
+    /// Defaults to the system accent, like the rest of the menu bar panel.
+    var fill: Color = .accentColor
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
@@ -49,7 +51,7 @@ struct PrimaryButtonStyle: ButtonStyle {
             .frame(height: 32)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.accentColor.opacity(isEnabled ? 1 : 0.35))
+                    .fill(fill.opacity(isEnabled ? 1 : 0.35))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)

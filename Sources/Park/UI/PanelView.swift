@@ -348,6 +348,11 @@ private struct SettingsMenu: View {
             Text("Open Park: ⌃⌥P")
             Text("Park this desktop: ⌃⌥⌘P")
             Divider()
+            Button("Welcome Guide…") {
+                model.dismissPanel()
+                model.showOnboarding()
+            }
+            Divider()
             Button("Quit Park") { NSApp.terminate(nil) }
                 .keyboardShortcut("q")
         } label: {

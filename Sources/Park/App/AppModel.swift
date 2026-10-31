@@ -43,6 +43,8 @@ final class AppModel {
 
     /// Called by the panel controller to close itself (e.g. right before restoring windows).
     var dismissPanel: () -> Void = {}
+    /// Opens the first-launch walkthrough again.
+    var showOnboarding: () -> Void = {}
 
     private var toastTask: Task<Void, Never>?
 

@@ -20,6 +20,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp ".build/arm64-apple-macosx/$CONFIG/Park" "$APP/Contents/MacOS/Park"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 [ -f Resources/AppIcon.icns ] && cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+cp Resources/Logo.png "$APP/Contents/Resources/Logo.png"
 
 codesign --force --timestamp=none --sign "$IDENTITY" "$APP"
 echo "Built $APP"
