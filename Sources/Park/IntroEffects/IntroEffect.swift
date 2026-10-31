@@ -3,12 +3,30 @@ import ApplicationServices
 import Metal
 import MetalKit
 
-/// The four candidates for Park's first-launch moment. Each is light drawn over the real screen,
-/// ending on Park's menu bar icon, where the panel (and the guided tour) begins.
+/// Park's first-launch moment and the candidates explored for it (playable with `Park --intro-lab`).
+/// Each is light drawn over the real screen, ending on Park's menu bar icon, where the panel (and the
+/// guided tour) begins.
 enum IntroEffect: String, CaseIterable, Identifiable {
     case ripple, dawn, clearing, lanes, gather, liquid, fireflies, tide, bloom
 
+    /// The one Park plays on a true first launch.
+    static let firstLaunch: IntroEffect = .fireflies
+
     var id: String { rawValue }
+
+    /// Plays the effect from Park's menu bar icon (`anchor`, in AppKit screen coordinates, as
+    /// `PanelController.statusAnchor` gives it). `handoff` fires as the light lands on the icon, or at once
+    /// on a skip, so the panel can drop from there; `done` fires when it's over. Reduce Motion skips it.
+    /// Keep the returned object alive until `done`.
+    @MainActor
+    func playFirstLaunch(from anchor: NSRect, handoff: @escaping () -> Void, done: @escaping () -> Void) -> AnyObject? {
+        let player = IntroEffectPlayer()
+        let top = NSScreen.screens.first?.frame.maxY ?? anchor.maxY
+        let handoffAt = self == .fireflies ? player.fireflies.arrival - 0.15 : duration * 0.6
+        player.play(self, origin: CGPoint(x: anchor.midX, y: top - anchor.midY),
+                    handoffAt: handoffAt, handoff: handoff, done: done)
+        return player
+    }
 
     var title: String {
         switch self {
@@ -214,6 +232,8 @@ final class IntroEffectPlayer: NSObject, MTKViewDelegate {
     private var skippedAt: CFTimeInterval?
     private var monitors: [Any] = []
     private var done: () -> Void = {}
+    private var handoff: (() -> Void)?
+    private var handoffAt: Double?
     /// Replays continuously until stopped, for tuning.
     private var loop = false
 
@@ -231,18 +251,22 @@ final class IntroEffectPlayer: NSObject, MTKViewDelegate {
     ///   - speed: 1 for real time, 0.5 to study the motion.
     ///   - skippable: whether a click or key anywhere skips it. Off while tuning, so the panel stays usable.
     ///   - loop: replay continuously until `stop()`.
+    ///   - handoffAt, handoff: called once at that effect time, or at once on a skip.
     func play(_ effect: IntroEffect, origin: CGPoint, speed: Double = 1, respectReduceMotion: Bool = true,
-              skippable: Bool = true, loop: Bool = false, done: @escaping () -> Void = {}) {
+              skippable: Bool = true, loop: Bool = false, handoffAt: Double? = nil, handoff: (() -> Void)? = nil,
+              done: @escaping () -> Void = {}) {
         stop()
         guard let screen = NSScreen.main, let renderer = renderer ?? IntroRenderer(),
               !(respectReduceMotion && NSWorkspace.shared.accessibilityDisplayShouldReduceMotion) else {
-            done(); return
+            handoff?(); done(); return
         }
         self.renderer = renderer
         self.effect = effect
         self.speed = speed
         self.origin = origin
         self.done = done
+        self.handoff = handoff
+        self.handoffAt = handoffAt
         self.loop = loop
         skippedAt = nil
 
@@ -278,6 +302,13 @@ final class IntroEffectPlayer: NSObject, MTKViewDelegate {
     func skip() {
         guard isPlaying, skippedAt == nil else { return }
         skippedAt = CACurrentMediaTime()
+        handOff()
+    }
+
+    private func handOff() {
+        let callback = handoff
+        handoff = nil
+        callback?()
     }
 
     nonisolated func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
@@ -301,6 +332,7 @@ final class IntroEffectPlayer: NSObject, MTKViewDelegate {
             elapsed = -0.5
         }
         let t = elapsed
+        if let handoffAt, t >= handoffAt { handOff() }
 
         let size = view.drawableSize
         let scale = size.width / max(1, screen.frame.width)
@@ -314,6 +346,7 @@ final class IntroEffectPlayer: NSObject, MTKViewDelegate {
     }
 
     private func finish() {
+        handOff()
         let callback = done
         stop()
         callback()
@@ -326,5 +359,6 @@ final class IntroEffectPlayer: NSObject, MTKViewDelegate {
         window?.orderOut(nil)
         window = nil
         done = {}
+        handoff = nil
     }
 }

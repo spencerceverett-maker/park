@@ -3,30 +3,33 @@ import Foundation
 /// Every tunable value of the Fireflies intro. Passed to the shaders as-is, so the fields must stay
 /// all `Float` and in the same order as `struct Fireflies` in `IntroShaders`.
 struct FireflyParams: Codable, Equatable {
-    var count: Float = 420
-    var size: Float = 1.15             // points, for the smallest motes
-    var sizeVariation: Float = 0.6     // power-law spread: most stay small, a few grow
-    var softness: Float = 0.55         // crisp point → soft bokeh falloff
-    var opacity: Float = 0.8
-    var opacityVariation: Float = 0.5
-    var twinkle: Float = 0.3
-    var twinkleSpeed: Float = 2.2
-    var depth: Float = 0.12            // share of large, out-of-focus motes
-    var scatter: Float = 1.0           // how much of the screen they start across
+    // Defaults: the values approved in the Intro Lab's tuning panel.
+    var count: Float = 609
+    var size: Float = 3.865693          // points, for the smallest motes
+    var sizeVariation: Float = 0.9166242 // power-law spread: most stay small, a few grow
+    var softness: Float = 0.056060348   // crisp point → soft bokeh falloff
+    var opacity: Float = 0.98303187
+    var opacityVariation: Float = 0.9843467
+    var twinkle: Float = 0.6865093
+    var twinkleSpeed: Float = 0.20006794
+    var depth: Float = 0.28277856       // share of large, out-of-focus motes
+    var scatter: Float = 1              // how much of the screen they start across
     var driftSpeed: Float = 34
     var swirl: Float = 1.2
     var turbulence: Float = 0.45
     var gatherTime: Float = 1.1
     var stagger: Float = 0.6
-    var colorMix: Float = 0.45         // deep sign blue → pale horizon
-    var whiteCore: Float = 1           // 0 or 1
-    var glow: Float = 0.25
+    var colorMix: Float = 0.0510077     // deep sign blue → pale horizon
+    var whiteCore: Float = 1            // 0 or 1
+    var glow: Float = 0.25043875
     var ringSize: Float = 15
     var ringSoftness: Float = 0.4
     var speed: Float = 1
 
+    /// Seconds until the last motes land on the ring, at speed 1. Matches `ffArrival` in the shader.
+    var arrival: Double { Double(0.35 + stagger + gatherTime * 1.2) }
     /// Seconds of the effect at speed 1: the last motes arrive, the ring settles and fades.
-    var duration: Double { Double(0.35 + stagger + gatherTime * 1.2 + 0.75) }
+    var duration: Double { arrival + 0.75 }
 
     static let maxCount = 1200
     var instanceCount: Int { min(max(Int(count), 0), Self.maxCount) }

@@ -60,10 +60,11 @@ final class GuidedTour {
         guard playIntro, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { openPanel(); return }
         Defaults.set(true, forKey: Self.didPlayIntroKey)
         go(.intro)
-        effect = IntroEffect.current.play(from: panel.statusAnchor,
-                                          handoff: { [weak self] in self?.openPanel() },
-                                          done: { [weak self] in self?.effect = nil })
+        effect = IntroEffect.firstLaunch.playFirstLaunch(from: panel.statusAnchor,
+                                                        handoff: { [weak self] in self?.openPanel() },
+                                                        done: { [weak self] in self?.effect = nil })
         capture("intro", after: 1.0)
+        capture("intro-landing", after: 2.1)
     }
 
     /// The real panel drops from Park's icon (or from beside the notch when the icon is hidden).
