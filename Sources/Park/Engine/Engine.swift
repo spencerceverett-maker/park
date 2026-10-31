@@ -317,9 +317,7 @@ final class Engine {
         for (bundleID, blankIDs) in freshBrowserWindows {
             for id in blankIDs { try? Chrome.close(chromeWindowID: id, bundleID: bundleID) }
         }
-        if let front = spot.windows.first {
-            NSRunningApplication.runningApplications(withBundleIdentifier: front.bundleID).first?.activate()
-        }
+        if let front = spot.windows.first { bringForward(front.bundleID) }
         return failures.reversed()
     }
 
@@ -333,7 +331,7 @@ final class Engine {
               let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return false }
         let done = DispatchSemaphore(value: 0)
         var opened: NSRunningApplication?
-        NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: NSWorkspace.OpenConfiguration()) { app, _ in
+        NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: .background) { app, _ in
             opened = app
             done.signal()
         }
@@ -350,18 +348,37 @@ final class Engine {
         let done = DispatchSemaphore(value: 0)
         var opened: NSRunningApplication?
         // Opening a running app sends it a "reopen", which brings back a window if it has none here.
-        NSWorkspace.shared.openApplication(at: appURL, configuration: NSWorkspace.OpenConfiguration()) { app, _ in
+        // It must not activate: activating an app whose windows are on other desktops switches you there.
+        NSWorkspace.shared.openApplication(at: appURL, configuration: .background) { app, _ in
             opened = app
             done.signal()
         }
         _ = done.wait(timeout: .now() + 15)
         guard let app = opened else { return false }
-        if let frame {
-            place(pid: app.processIdentifier, frame: frame) { element in
-                AX.windowID(element).map { !before.contains($0) } ?? false
-            }
+        let isNew: (AXUIElement) -> Bool = { element in AX.windowID(element).map { !before.contains($0) } ?? false }
+        if !waitForWindow(pid: app.processIdentifier, timeout: 3, where: isNew) {
+            // Some apps ignore reopen while running in the background; ask for a window directly.
+            AXMenu.click(pid: app.processIdentifier, "File", "New Window")
         }
+        if let frame { place(pid: app.processIdentifier, frame: frame, where: isNew) }
         return true
+    }
+
+    /// Brings an app forward only if it has a window on this desktop, so macOS doesn't switch desktops.
+    private func bringForward(_ bundleID: String) {
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first,
+              let (window, _) = AX.windows(pid: app.processIdentifier).first else { return }
+        AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+        app.activate()
+    }
+
+    private func waitForWindow(pid: pid_t, timeout: TimeInterval, where predicate: (AXUIElement) -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if AX.windows(pid: pid).contains(where: { predicate($0.0) }) { return true }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        return false
     }
 
     /// Waits briefly for a window matching `predicate` to appear on this desktop, then moves it into place.
@@ -388,6 +405,15 @@ final class Engine {
         try await withCheckedThrowingContinuation { continuation in
             queue.async { continuation.resume(with: Result { try work() }) }
         }
+    }
+}
+
+extension NSWorkspace.OpenConfiguration {
+    /// Opens without activating. Activation is done separately, once a window exists on this desktop.
+    static var background: NSWorkspace.OpenConfiguration {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false
+        return configuration
     }
 }
 
