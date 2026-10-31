@@ -3,8 +3,28 @@ import AppKit
 /// Command-line entry points for checking the engine without the UI.
 ///   Park --dry-run    print what parking this desktop would save; closes nothing
 ///   Park --self-test  open throwaway windows, park and restore only those, and report
+///   Park --intro-lab  play the first-launch intro candidates live and compare them
+///   Park --intro=<ripple|dawn|clearing|lanes> [--speed=0.5] [--anchor=clock]  play one, then quit
+///   Park --intro-frames=<name|all> <outdir> [--background=<png>]  render stills for design review
 enum DevCommands {
     static func run(_ arguments: [String]) -> Bool {
+        if arguments.contains("--intro-lab") {
+            MainActor.assumeIsolated { IntroLab.run() }
+            return true
+        }
+        if let flag = arguments.first(where: { $0.hasPrefix("--intro=") }),
+           let effect = IntroEffect(rawValue: String(flag.dropFirst("--intro=".count))) {
+            let speed = arguments.first(where: { $0.hasPrefix("--speed=") }).flatMap { Double($0.dropFirst("--speed=".count)) } ?? 1
+            let anchor: IntroAnchor.Source = arguments.contains("--anchor=clock") ? .nearClock : .parkIcon
+            MainActor.assumeIsolated { IntroLab.playOnce(effect, speed: speed, anchor: anchor) }
+            return true
+        }
+        if let index = arguments.firstIndex(where: { $0.hasPrefix("--intro-frames=") }), index + 1 < arguments.count {
+            let name = String(arguments[index].dropFirst("--intro-frames=".count))
+            let background = arguments.first(where: { $0.hasPrefix("--background=") }).map { String($0.dropFirst("--background=".count)) }
+            IntroFrames.render(name: name, to: arguments[index + 1], background: background)
+            return true
+        }
         if arguments.contains("--dry-run") {
             block { await dryRun() }
             return true
