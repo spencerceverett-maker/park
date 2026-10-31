@@ -150,14 +150,13 @@ button { font: inherit; color: inherit; }
   display: inline-flex; align-items: center; height: 36px; padding: 0 18px; margin-left: auto;
   border-radius: 999px; font-weight: 500; font-size: 14px;
   color: #1d1d1f; background: #fff;
-  transition: background-color 160ms ease, color 160ms ease, transform 160ms var(--ease-out);
+  transition: background-color 160ms ease, color 160ms ease, filter 160ms ease, transform 160ms var(--ease-out);
 }
 .menu + .pill { margin-left: 0; }
 .pill:hover { text-decoration: none; background: rgba(255, 255, 255, 0.86); }
 .pill, .dock-button { transform: translate(var(--mx, 0px), var(--my, 0px)) scale(var(--press, 1)); transition: transform 220ms var(--ease-out), background-color 150ms ease; }
 .pill:active, .dock-button:active { --press: 0.97; transition-duration: 100ms; }
-.nav.is-solid .pill { color: #fff; background: var(--blue); }
-.nav.is-solid .pill:hover { background: var(--blue-hover); }
+.nav.is-solid .pill { color: #fff; }
 
 /* ---------- Hero: an inset card of daylight, with a Mac rising out of it ---------- */
 
@@ -231,7 +230,7 @@ button { font: inherit; color: inherit; }
   min-height: 50px; padding: 0 28px; border: 0; border-radius: 999px;
   font-size: 17px; font-weight: 500; letter-spacing: -0.01em; cursor: pointer;
   transform: translate(var(--mx, 0px), var(--my, 0px)) scale(var(--press, 1));
-  transition: transform 220ms var(--ease-out), background-color 150ms ease, box-shadow 150ms ease;
+  transition: transform 220ms var(--ease-out), background-color 150ms ease, box-shadow 150ms ease, filter 150ms ease;
 }
 .button:hover { text-decoration: none; }
 .button:active { --press: 0.97; transition-duration: 100ms; }
@@ -239,8 +238,20 @@ button { font: inherit; color: inherit; }
 /* On the night sky the call to action is white; elsewhere it's the sign blue. */
 .button-light { color: #1d1d1f; background: #fff; box-shadow: 0 10px 28px rgba(var(--shadow), 0.3); }
 .button-light:hover { background: rgba(255, 255, 255, 0.9); }
-.button-dark { color: #fff; background: var(--blue); }
-.button-dark:hover { background: var(--blue-hover); }
+.button-dark { color: #fff; }
+/* Blue buttons are lit like the logo: light from above, a bright top edge, a deeper base. */
+.button-dark, .nav.is-solid .pill, .dock-button, .p-button {
+  background:
+    radial-gradient(120% 90% at 50% -20%, rgba(150, 190, 255, 0.55), transparent 60%),
+    linear-gradient(180deg, #2c62c4 0%, #1e50a8 55%, #163e88 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -1px 1px rgba(5, 18, 52, 0.35),
+    inset 0 0 0 1px rgba(10, 32, 84, 0.3),
+    0 1px 2px rgba(11, 31, 77, 0.28),
+    0 8px 18px -6px rgba(30, 80, 168, 0.55);
+}
+.button-dark:hover, .nav.is-solid .pill:hover, .dock-button:hover, .p-button:hover { filter: brightness(1.08); }
 
 .meta { margin-top: 16px; font-size: 14px; color: rgba(255, 255, 255, 0.64); }
 
@@ -521,12 +532,10 @@ button { font: inherit; color: inherit; }
 .p-button {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   width: 100%; height: 32px; margin-top: 12px; border: 0; border-radius: 8px;
-  color: #fff; background: var(--p-accent);
-  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.14);
+  color: #fff;
   font-size: 13px; font-weight: 600; cursor: pointer;
   transition: transform 120ms ease, opacity 160ms ease, filter 120ms ease;
 }
-.p-button:hover { filter: brightness(1.06); }
 .p-button:active { transform: scale(0.985); filter: brightness(0.9); }
 .p-button:disabled { opacity: 0.38; cursor: default; filter: none; transform: none; }
 .p-button kbd {
@@ -655,10 +664,21 @@ kbd {
 .detail-list { display: grid; grid-template-columns: 1fr 1fr; gap: 26px 56px; margin: 48px 0 0; padding: 0; list-style: none; }
 .detail-list li { display: flex; gap: 14px; align-items: flex-start; font-size: 16px; line-height: 1.45; color: var(--ink-2); }
 .detail-list strong { color: var(--ink); font-weight: 600; }
-.glyph { display: grid; place-items: center; flex: none; width: 30px; height: 30px; margin-top: -2px; border-radius: 50%; color: #fff; }
+.glyph { display: grid; place-items: center; flex: none; width: 32px; height: 32px; margin-top: -3px; border-radius: 50%; color: #fff; }
 /* Icons are Lucide (ISC); each sets its own optical size via width/height. */
-.glyph svg { display: block; flex: none; }
-.glyph { background: var(--glyph); }
+.glyph svg { display: block; flex: none; filter: drop-shadow(0 1px 1px rgba(5, 16, 44, 0.45)); }
+/* Small orbs, like the logo: a deep navy face lit from above, inside a frosted light-blue ring. */
+.glyph {
+  background:
+    radial-gradient(110% 70% at 50% 4%, rgba(170, 200, 255, 0.5), transparent 52%),
+    radial-gradient(circle at 50% 38%, #24489c 0%, #142f72 55%, #0a1a46 100%);
+  box-shadow:
+    inset 0 0 0 2.5px #a9c3f2,
+    inset 0 0 0 3px rgba(255, 255, 255, 0.55),
+    inset 0 -3px 5px rgba(4, 12, 36, 0.45),
+    0 0 0 0.5px rgba(30, 80, 168, 0.35),
+    0 4px 10px rgba(11, 31, 77, 0.22);
+}
 
 .features-intro strong { color: var(--ink); font-weight: 600; }
 
@@ -677,8 +697,8 @@ kbd {
 .dock-text { display: flex; flex-direction: column; margin-right: 6px; font-size: 13px; line-height: 1.3; }
 .dock-text strong { font-weight: 600; }
 .dock-text span { color: var(--ink-3); }
-.dock-button { display: inline-flex; align-items: center; height: 34px; padding: 0 16px; border-radius: 999px; font-size: 14px; font-weight: 500; color: #fff; background: var(--blue); }
-.dock-button:hover { text-decoration: none; background: var(--blue-hover); }
+.dock-button { display: inline-flex; align-items: center; height: 34px; padding: 0 16px; border-radius: 999px; font-size: 14px; font-weight: 500; color: #fff; }
+.dock-button:hover { text-decoration: none; }
 .dock-link { padding: 0 10px; font-size: 14px; }
 @media (max-width: 860px) { .dock-text span { display: none; } .dock { justify-content: space-between; } }
 
