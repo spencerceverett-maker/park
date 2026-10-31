@@ -93,7 +93,8 @@ struct SpotRow: View {
 
     private var isRestoring: Bool { model.restoringID == spot.id }
     private var justParked: Bool { model.justParkedID == spot.id }
-    private var showsActions: Bool { (hovering || isSelected) && !isRenaming }
+    /// The tour keeps Restore visible on the practice row while it points at it.
+    private var showsActions: Bool { (hovering || isSelected || model.tourSpotID == spot.id) && !isRenaming }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -138,6 +139,8 @@ struct SpotRow: View {
                 HStack(spacing: 2) {
                     Button("Restore") { Task { await model.restore(spot) } }
                         .buttonStyle(QuietButtonStyle(prominent: true))
+                        .tourGlow(model.tourFocus == .restore && model.tourSpotID == spot.id, cornerRadius: 6)
+                        .tourAnchor(.restore(spot.id))
                     RowMenu(spot: spot, rename: startRename)
                 }
                 .transition(.opacity)
@@ -149,6 +152,7 @@ struct SpotRow: View {
             RoundedRectangle(cornerRadius: Theme.rowRadius, style: .continuous)
                 .fill(background)
         )
+        .tourAnchor(.row(spot.id))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .onTapGesture(count: 2) { startRename() }
@@ -170,7 +174,7 @@ struct SpotRow: View {
     }
 
     private var background: Color {
-        if justParked { return Color.accentColor.opacity(0.14) }
+        if justParked { return Theme.brand.opacity(0.14) }
         if isSelected || hovering || isRenaming { return Theme.hover }
         return .clear
     }

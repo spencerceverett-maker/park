@@ -165,13 +165,18 @@ enum IntroLight {
         private var monitors: [Any] = []
         private var handoff: () -> Void = {}
         private var done: () -> Void = {}
+        /// Where the light comes from, in screen points (AppKit coordinates). nil: top centre.
+        private var origin: CGPoint?
+        private var screenFrame: CGRect = .zero
 
-        func play(handoff: @escaping () -> Void, done: @escaping () -> Void = {}) {
+        func play(from origin: CGPoint? = nil, handoff: @escaping () -> Void, done: @escaping () -> Void = {}) {
+            self.origin = origin
             guard let screen = NSScreen.main, let renderer = Renderer(),
                   !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
                 handoff(); done(); return
             }
             self.renderer = renderer
+            self.screenFrame = screen.frame
             self.handoff = handoff
             self.done = done
 
@@ -229,10 +234,15 @@ enum IntroLight {
             if t >= IntroLight.duration || fade >= 1 { finish(); return }
 
             let size = view.drawableSize
-            // The light pours down from just above the menu bar, where Park lives.
+            // The light pours down from just above the menu bar: from Park's icon when we know where it is.
+            var source = SIMD2(Float(size.width / 2), Float(-size.height * 0.12))
+            if let origin, screenFrame.width > 0 {
+                let scale = size.width / screenFrame.width
+                source = SIMD2(Float((origin.x - screenFrame.minX) * scale), Float(-size.height * 0.05))
+            }
             let uniforms = Uniforms(time: Float(t), fadeOut: Float(fade),
                                     resolution: SIMD2(Float(size.width), Float(size.height)),
-                                    origin: SIMD2(Float(size.width / 2), Float(-size.height * 0.12)))
+                                    origin: source)
             renderer.encode(into: pass, buffer: buffer, uniforms: uniforms)
             buffer.present(drawable)
             buffer.commit()

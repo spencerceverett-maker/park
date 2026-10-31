@@ -54,12 +54,12 @@ if $NOTARIZE; then
   spctl --assess --type execute --verbose=2 "$APP"
 fi
 
-# The disk image: the stapled app beside an Applications alias, over a background drawn by
-# scripts/dmg-background.swift. dmgbuild writes Finder's layout directly (no Finder scripting).
+# The disk image: the stapled app beside an Applications alias, over the quiet grid background drawn by
+# scripts/dmg-quiet.swift. dmgbuild writes Finder's layout directly (no Finder scripting).
 DMG=build/release/Park.dmg
 VENV=build/.venv-dmg
 [ -x "$VENV/bin/dmgbuild" ] || { python3 -m venv "$VENV" && "$VENV/bin/pip" install -q dmgbuild; }
-swift scripts/dmg-background.swift build/dmg --style="${PARK_DMG_STYLE:-current}" >/dev/null   # lot, dawn, editorial, menubar, ticket
+swift scripts/dmg-quiet.swift build/dmg >/dev/null
 tiffutil -cathidpicheck build/dmg/background.png build/dmg/background@2x.png -out build/dmg/background.tiff 2>/dev/null
 rm -f "$DMG"
 "$VENV/bin/dmgbuild" -s scripts/dmg-settings.py -D app="$APP" -D background=build/dmg/background.tiff \

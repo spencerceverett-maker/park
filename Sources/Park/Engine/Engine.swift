@@ -27,9 +27,10 @@ final class Engine {
 
     // MARK: - Preview
 
-    func preview() async -> DesktopPreview {
+    /// - Parameter only: restrict to these windows (the guided tour's practice windows).
+    func preview(only: Set<CGWindowID>? = nil) async -> DesktopPreview {
         await run {
-            let windows = CurrentSpace.windows()
+            let windows = CurrentSpace.windows().filter { only?.contains($0.windowID) ?? true }
             var bundleIDs: [String] = []
             var names: [String] = []
             for window in windows {

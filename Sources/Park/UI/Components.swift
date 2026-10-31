@@ -40,7 +40,7 @@ struct IconStack: View {
 /// The filled accent button used for the single primary action.
 struct PrimaryButtonStyle: ButtonStyle {
     /// Defaults to the system accent, like the rest of the menu bar panel.
-    var fill: Color = .accentColor
+    var fill: Color = Theme.brand
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
@@ -75,7 +75,7 @@ struct QuietButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(prominent ? Color.accentColor : .secondary)
+            .foregroundStyle(prominent ? Theme.brandText : .secondary)
             .padding(.horizontal, 8)
             .frame(height: 24)
             .background(

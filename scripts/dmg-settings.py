@@ -3,7 +3,7 @@
 #            -D icon=Resources/AppIcon.icns Park build/release/Park.dmg
 # dmgbuild writes Finder's window layout (.DS_Store) directly, so no Finder scripting is needed.
 # Window size and icon positions come from layout.json, written next to the background by
-# scripts/dmg-background.swift, so the art and Finder's layout always match.
+# scripts/dmg-quiet.swift, so the art and Finder's layout always match.
 import json
 import os.path
 

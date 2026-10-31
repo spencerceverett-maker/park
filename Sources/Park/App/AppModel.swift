@@ -14,6 +14,15 @@ struct DesktopPreview: Equatable {
     static let empty = DesktopPreview(windowCount: 0, bundleIDs: [], appNames: [])
 }
 
+/// Panel elements the guided tour can point at.
+enum TourAnchor: Hashable {
+    case header, parkButton, permissionButton, row(Spot.ID), restore(Spot.ID)
+}
+
+enum TourFocus: Equatable {
+    case header, parkButton, permission, row, restore
+}
+
 /// A short-lived message at the bottom of the panel, optionally with an undo action.
 struct Toast: Identifiable, Equatable {
     let id = UUID()
@@ -41,6 +50,18 @@ final class AppModel {
     var memory = MemoryStats.current()
     var errorMessage: String?
 
+    // MARK: Guided tour
+
+    /// While the tour runs, the panel only sees (and parks) these practice windows.
+    var tourScope: Set<CGWindowID>?
+    /// The panel element the tour is pointing at, so it can glow or show its actions.
+    var tourFocus: TourFocus?
+    /// The practice desktop once parked; its row keeps Restore visible while the tour points at it.
+    var tourSpotID: Spot.ID?
+    var isTouring: Bool { tourScope != nil }
+    /// Frames of panel elements the tour points at, in the panel's coordinates (top-left origin).
+    @ObservationIgnored var anchors: [TourAnchor: CGRect] = [:]
+
     /// Called by the panel controller to close itself (e.g. right before restoring windows).
     var dismissPanel: () -> Void = {}
     /// Opens the first-launch walkthrough again.
@@ -56,8 +77,8 @@ final class AppModel {
 
     /// Quit apps whose windows are all on the parked desktop. Frees the most memory.
     var quitApps: Bool {
-        get { access(keyPath: \.quitApps); return UserDefaults.standard.object(forKey: "quitApps") as? Bool ?? true }
-        set { withMutation(keyPath: \.quitApps) { UserDefaults.standard.set(newValue, forKey: "quitApps") } }
+        get { access(keyPath: \.quitApps); return Defaults.object(forKey: "quitApps") as? Bool ?? true }
+        set { withMutation(keyPath: \.quitApps) { Defaults.set(newValue, forKey: "quitApps") } }
     }
 
     private var previewTask: Task<Void, Never>?
@@ -73,7 +94,7 @@ final class AppModel {
         guard hasAccessibility else { preview = .empty; return }
         previewTask?.cancel()
         previewTask = Task { @MainActor in
-            let fresh = await engine.preview()
+            let fresh = await engine.preview(only: tourScope)
             guard !Task.isCancelled else { return }
             withAnimation(Theme.spring) { preview = fresh }
         }
@@ -94,15 +115,17 @@ final class AppModel {
         defer { isParking = false }
 
         do {
-            let result = try await engine.parkCurrentDesktop(quitApps: quitApps)
-            let spot = result.spot
+            // The tour parks only its practice windows and never quits an app.
+            let result = try await engine.parkCurrentDesktop(quitApps: isTouring ? false : quitApps, only: tourScope)
+            var spot = result.spot
+            if isTouring { spot.name = "Practice" }
             Log.write("parked \(spot.windows.count) windows (\(Set(spot.windows.map(\.appName)).sorted().joined(separator: ", "))); \(result.notes.count) notes")
             withAnimation(Theme.spring) {
                 store.insert(spot)
                 justParkedID = spot.id
             }
             SpotStore.clearPending()
-            preview = await engine.preview()
+            preview = await engine.preview(only: tourScope)
             if let note = result.notes.first {
                 errorMessage = note
             } else {
@@ -128,8 +151,8 @@ final class AppModel {
         restoringID = spot.id
         defer { restoringID = nil }
 
-        // Get the panel out of the way so restored windows come forward cleanly.
-        dismissPanel()
+        // Get the panel out of the way so restored windows come forward cleanly (the tour keeps it open).
+        if !isTouring { dismissPanel() }
         let failures = await engine.restore(spot)
         Log.write("restored \(spot.windows.count - failures.count) of \(spot.windows.count) windows; failed: \(failures.map(\.appName))")
         if failures.isEmpty {
