@@ -469,7 +469,7 @@ button { font: inherit; color: inherit; }
 
 .try-chip {
   position: absolute; z-index: 6; top: calc(14px + 30px + 6px + var(--panel-h, 282px) + 16px); right: calc(var(--bleed) + 14px + 3% + 170px); transform: translateX(50%);
-  display: flex; align-items: center; gap: 8px; padding: 9px 14px 9px 12px;
+  display: flex; align-items: center; gap: 8px; padding: 9px 14px 9px 12px; white-space: nowrap;
   border-radius: 999px; font-size: 13px; color: #fff;
   background: rgba(11, 27, 54, 0.36);
   -webkit-backdrop-filter: blur(16px) saturate(150%); backdrop-filter: blur(16px) saturate(150%);
@@ -478,6 +478,9 @@ button { font: inherit; color: inherit; }
 }
 .try-chip strong { font-weight: 600; }
 .try-chip.is-done { opacity: 0; transform: translateX(50%) translateY(-6px); pointer-events: none; }
+.try-chip.is-beside { top: var(--beside-top); right: var(--beside-right); transform: none; }
+.try-chip.is-beside.is-done { transform: translateY(-6px); }
+.try-chip.is-off { opacity: 0; visibility: hidden; transition: opacity 150ms ease, visibility 0s linear 150ms; }
 .try-dot { width: 7px; height: 7px; border-radius: 50%; background: #5ee08a; box-shadow: 0 0 0 3px rgba(94, 224, 138, 0.25); }
 
 .panel {
@@ -676,7 +679,9 @@ kbd {
 .dock-link { padding: 0 10px; font-size: 14px; }
 @media (max-width: 860px) { .dock-text span { display: none; } .dock { justify-content: space-between; } }
 
-.support { background: var(--surface); text-align: center; }
+.support { position: relative; isolation: isolate; overflow: hidden; overflow: clip; background: var(--surface); text-align: center; }
+/* Sparkles rise from below the section's bottom edge and thin out as they climb. */
+.sparkle-sky { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
 .support-inner { display: flex; flex-direction: column; align-items: center; }
 .support-icon { width: 88px; height: 88px; margin-bottom: 28px; filter: drop-shadow(0 14px 24px rgba(var(--shadow), 0.2)); }
 .support .section-lede { margin-left: auto; margin-right: auto; }
@@ -710,9 +715,7 @@ kbd {
 .faq details[open] summary::after { transform: rotate(0deg); }
 .faq details p { padding: 0 44px 24px 0; color: var(--ink-2); max-width: 64ch; }
 
-.footer { position: relative; isolation: isolate; padding: 28px 0 120px; border-top: 0.5px solid var(--hair); font-size: 13px; color: var(--ink-3); overflow: hidden; overflow: clip; }
-/* Sparkles rise from below the bottom edge and fade before they reach the footer's text. */
-.footer-sky { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+.footer { padding: 28px 0 40px; border-top: 0.5px solid var(--hair); font-size: 13px; color: var(--ink-3); }
 .footer-inner { display: flex; align-items: center; gap: 24px; }
 .footer-inner p { flex: 1; }
 .footer a { color: var(--ink-2); }

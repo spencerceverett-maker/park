@@ -228,7 +228,7 @@ export function mountFireflies(host, { still = false, rise = false, density = FI
       draw[i * 3] = pos[i * 2] + leanX * lean;
       draw[i * 3 + 1] = y + leanY * lean;
       // Rising motes are brightest just above the edge and gone by the top.
-      draw[i * 3 + 2] = rise ? Math.max(0, Math.min(1, (H - y) / 24)) * (1 - smooth(0.25, 1, 1 - y / H)) : 1;
+      draw[i * 3 + 2] = rise ? Math.max(0, Math.min(1, (H - y) / 24)) * (1 - smooth(0.05, 0.7, 1 - y / H)) : 1;
     }
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.clearColor(0, 0, 0, 0);

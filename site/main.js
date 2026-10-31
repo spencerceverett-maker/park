@@ -453,7 +453,27 @@ function wireDemo() {
   function setPanel(open) {
     toggle.setAttribute("aria-expanded", String(open));
     panel.classList.toggle("is-hidden", !open);
+    fitTryChip();
   }
+
+  // The hint points at the panel's button, so it goes with the panel, and steps aside rather than
+  // hang off the bottom of the screen when the Mac is short.
+  function fitTryChip() {
+    if (!tryChip) return;
+    const screenBox = display.getBoundingClientRect();
+    const top = panel.getBoundingClientRect().bottom + 16;
+    const fits = top + tryChip.offsetHeight <= screenBox.bottom - 12;
+    // No room below: sit to the panel's left, level with the button it points at.
+    tryChip.classList.toggle("is-beside", !fits);
+    if (!fits) {
+      const host = tryChip.offsetParent.getBoundingClientRect();
+      const button = parkButton.getBoundingClientRect();
+      tryChip.style.setProperty("--beside-top", `${button.top + button.height / 2 - host.top - tryChip.offsetHeight / 2}px`);
+      tryChip.style.setProperty("--beside-right", `${host.right - panel.getBoundingClientRect().left + 12}px`);
+    }
+    tryChip.classList.toggle("is-off", panel.classList.contains("is-hidden"));
+  }
+  new ResizeObserver(fitTryChip).observe(display);
 
   function showToast(message) {
     toast.innerHTML = `<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><circle cx="8" cy="8" r="8" fill="currentColor"/><path d="m4.6 8.2 2.3 2.3 4.5-4.7" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span></span>`;
@@ -951,11 +971,11 @@ function wireFireflies() {
   const hero = $(".hero");
   if (!hero) return;
   // With reduced motion they stay: one still frame of texture, no movement.
-  const footerSky = $("[data-footer-sky]");
+  const sparkles = $("[data-sparkles]");
   import("./fireflies.js").then(({ mountFireflies }) => {
     mountFireflies(hero, { still: reducedMotion.matches });
-    // Blue sparkles rising from below the page's bottom edge, under the footer.
-    if (footerSky) mountFireflies(footerSky, { still: reducedMotion.matches, rise: true, density: 260 / 1e6, listen: $(".footer"), look: { colorMix: 0, depth: 0.04 } });
+    // Blue sparkles rising from below the "Park is free" section's bottom edge.
+    if (sparkles) mountFireflies(sparkles, { still: reducedMotion.matches, rise: true, density: 170 / 1e6, listen: $(".support"), look: { colorMix: 0, depth: 0.04 } });
   }).catch(() => {});
 }
 
