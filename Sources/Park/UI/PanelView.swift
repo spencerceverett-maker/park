@@ -29,6 +29,7 @@ struct PanelView: View {
                     .onChange(of: proxy.size.height) { _, height in onHeightChange(height) }
             }
         )
+        .onPreferenceChange(TourAnchorsKey.self) { model.anchors = $0 }
         .focusable()
         .focusEffectDisabled()
         .focused($focused)
@@ -105,16 +106,17 @@ private struct DesktopSection: View {
                         .frame(width: 22 + 2 * 22 * 0.68, alignment: .leading)
                 }
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(loading ? "This desktop" : preview.windowCount > 0 ? NameList.string(preview.appNames) : "Nothing open here")
+                    Text(loading ? "This desktop" : preview.windowCount > 0 ? NameList.string(preview.appNames) : justCleared ? "All clear" : "Nothing open here")
                         .font(.system(size: 13, weight: .medium))
                         .lineLimit(1)
-                    Text(loading ? "Looking for windows…" : subtitle(preview))
+                    Text(loading ? "Looking for windows…" : preview.windowCount == 0 && justCleared ? "This desktop's windows are parked below" : subtitle(preview))
                         .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
             }
+            .tourAnchor(.header)
 
             if !preview.runningCommands.isEmpty {
                 RunningWarning(commands: preview.runningCommands)
@@ -136,6 +138,8 @@ private struct DesktopSection: View {
             }
             .buttonStyle(PrimaryButtonStyle())
             .disabled((!loading && preview.windowCount == 0) || model.isParking)
+            .tourGlow(model.tourFocus == .parkButton)
+            .tourAnchor(.parkButton)
 
             if let error = model.errorMessage {
                 Text(error)
@@ -148,6 +152,9 @@ private struct DesktopSection: View {
         .padding(16)
         .animation(Theme.spring, value: model.errorMessage)
     }
+
+    /// Right after parking (or during the tour), an empty desktop is the goal, not a dead end.
+    private var justCleared: Bool { model.isTouring || model.justParkedID != nil }
 
     private func subtitle(_ preview: DesktopPreview) -> String {
         switch preview.windowCount {
@@ -198,9 +205,9 @@ private struct PermissionSection: View {
         VStack(alignment: .leading, spacing: 14) {
             Image(systemName: "macwindow.on.rectangle")
                 .font(.system(size: 22, weight: .regular))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(Theme.brandText)
                 .frame(width: 40, height: 40)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.accentColor.opacity(0.12)))
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.brand.opacity(0.12)))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Let Park see your windows")
@@ -214,6 +221,8 @@ private struct PermissionSection: View {
 
             Button("Open System Settings") { model.requestAccessibility() }
                 .buttonStyle(PrimaryButtonStyle())
+                .tourGlow(model.tourFocus == .permission)
+                .tourAnchor(.permissionButton)
 
             HStack(spacing: 6) {
                 ProgressView().controlSize(.mini)
@@ -348,7 +357,7 @@ private struct SettingsMenu: View {
             Text("Open Park: ⌃⌥P")
             Text("Park this desktop: ⌃⌥⌘P")
             Divider()
-            Button("Welcome Guide…") {
+            Button("Take the Tour") {
                 model.dismissPanel()
                 model.showOnboarding()
             }

@@ -536,14 +536,14 @@ final class OnboardingController: NSObject, NSWindowDelegate {
     }
 
     private func finish() {
-        UserDefaults.standard.set(true, forKey: Self.didFinishKey)
+        Defaults.set(true, forKey: Self.didFinishKey)
         window?.close()
         onFinish()
     }
 
     func windowWillClose(_ notification: Notification) {
         // Closing early still counts as seen; the guide stays one click away in the ··· menu.
-        UserDefaults.standard.set(true, forKey: Self.didFinishKey)
+        Defaults.set(true, forKey: Self.didFinishKey)
         window = nil
     }
 }

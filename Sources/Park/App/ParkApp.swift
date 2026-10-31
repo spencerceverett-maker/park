@@ -14,7 +14,7 @@ enum ParkMain {
 
         // One Park at a time: a second launch asks the running one to show its panel, then quits.
         // (After a move to Applications the old copy is still quitting, so that launch goes ahead.)
-        if !arguments.contains(Installer.relaunchArgument), SingleInstance.handOffToRunningCopy() { return }
+        if !DevMode.isOn, !arguments.contains(Installer.relaunchArgument), SingleInstance.handOffToRunningCopy() { return }
 
         let app = NSApplication.shared
         let delegate = AppDelegate()
@@ -31,8 +31,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKey: HotKey?
     private var panelHotKey: HotKey?
     private let model = AppModel()
+    /// The carousel walkthrough, kept for reference (branch `onboarding-carousel`); the guided tour replaced it.
     private let onboarding = OnboardingController()
-    private var intro: IntroLight.Player?
+    private var tour: GuidedTour!
+    private var moveCard: MoveCardWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -48,9 +50,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A menu bar app you forget to launch is no help: open at login by default.
         // Turning it off in the ··· menu is remembered and never overridden. Only from Applications:
         // a login item registered from the disk image or Downloads would point at the wrong copy.
-        if Installer.isInApplicationsFolder && !UserDefaults.standard.bool(forKey: "didSetUpLoginItem") {
+        if !DevMode.isOn && Installer.isInApplicationsFolder && !Defaults.bool(forKey: "didSetUpLoginItem") {
             LoginItem.set(true)
-            UserDefaults.standard.set(true, forKey: "didSetUpLoginItem")
+            Defaults.set(true, forKey: "didSetUpLoginItem")
         }
 
         // ⌃⌥P opens the panel, even when the menu bar icon is hidden behind the notch.
@@ -63,17 +65,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.parkFromHotKey()
         }
 
-        onboarding.onFinish = { [weak self] in
-            // End where Park lives: the panel, hanging from its menu bar icon.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self?.panel.open() }
-        }
-        model.showOnboarding = { [weak self] in self?.onboarding.show() }
-        onboarding.onShowPanel = { [weak self] in self?.panel.open() }
+        tour = GuidedTour(model: model, panel: panel)
+        model.showOnboarding = { [weak self] in self?.tour.start(playIntro: false) }
         SingleInstance.listen { [weak self] in self?.panel.open() }
 
-        if !UserDefaults.standard.bool(forKey: OnboardingController.didFinishKey) || !Installer.isInApplicationsFolder {
-            // First launch, or opened from the disk image or Downloads: walk through setup.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.startOnboarding() }
+        let finished = Defaults.bool(forKey: GuidedTour.didCompleteKey) || Defaults.bool(forKey: OnboardingController.didFinishKey)
+        if !finished || DevMode.forcesTour {
+            // First launch: the tour, on the real desktop. The intro plays once, never after the relaunch
+            // from "Move to Applications".
+            let playIntro = !Defaults.bool(forKey: GuidedTour.didPlayIntroKey) || DevMode.forcesTour
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.tour.start(playIntro: playIntro) }
+        } else if !Installer.isInApplicationsFolder && !DevMode.isOn {
+            // Opened from the disk image or Downloads again: offer the move on its own.
+            let card = MoveCardWindow()
+            card.onNotNow = { [weak self] in self?.moveCard = nil }
+            card.show()
+            moveCard = card
         } else if !AXIsProcessTrusted() {
             // Access was turned off since: the panel's permission step explains it.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.panel.open() }
@@ -82,17 +89,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func togglePanel() {
         panel.toggle()
-    }
-
-    /// First launch only: the light rises, and the walkthrough arrives out of it. Afterwards (including
-    /// the relaunch after "Move to Applications"), the walkthrough simply opens.
-    private func startOnboarding() {
-        let key = "didPlayIntroLight"
-        guard !UserDefaults.standard.bool(forKey: key) else { onboarding.show(); return }
-        UserDefaults.standard.set(true, forKey: key)
-        intro = IntroLight.Player()
-        intro?.play(handoff: { [weak self] in self?.onboarding.show(materialize: true) },
-                    done: { [weak self] in self?.intro = nil })
     }
 
     private func parkFromHotKey() {
@@ -109,7 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 /// Keeps Park to one running copy, using a distributed notification between copies.
 enum SingleInstance {
-    private static let showPanel = Notification.Name("com.spencereverett.park.showPanel")
+    private static let showPanel = Notification.Name(DevMode.isOn ? "com.spencereverett.park.dev.showPanel" : "com.spencereverett.park.showPanel")
 
     /// Returns true if another Park is running; that copy is asked to show its panel.
     static func handOffToRunningCopy() -> Bool {

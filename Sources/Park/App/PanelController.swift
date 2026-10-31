@@ -41,6 +41,10 @@ final class PanelController: NSObject, NSWindowDelegate {
     private var generation = 0
 
     var isOpen: Bool { panel.isVisible }
+    /// While pinned (the guided tour), clicking elsewhere doesn't close the panel.
+    var isPinned = false
+    var frame: NSRect { panel.frame }
+    var windowNumber: Int { panel.windowNumber }
 
     init(model: AppModel, statusButton: NSStatusBarButton) {
         self.model = model
@@ -104,6 +108,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         }
         statusButton?.highlight(true)
         outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            guard self?.isPinned == false else { return }
             self?.close()
         }
     }
@@ -130,15 +135,51 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     func windowDidResignKey(_ notification: Notification) {
         // Clicking another app's window closes the panel, like a menu.
+        guard !isPinned else { return }
         close()
+    }
+
+    // MARK: - Where things are on screen
+
+    /// Whether Park's menu bar icon can actually be seen. A full menu bar on a notched Mac hides
+    /// the newest icons behind the camera housing, and macOS then doesn't show them at all.
+    var isStatusItemVisible: Bool {
+        guard let button = statusButton, let window = button.window, window.isVisible,
+              window.occlusionState.contains(.visible) else { return false }
+        let rect = window.convertToScreen(button.convert(button.bounds, to: nil))
+        guard rect.width > 0, let screen = window.screen ?? NSScreen.main, screen.frame.intersects(rect) else { return false }
+        if let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea {
+            let notch = NSRect(x: left.maxX, y: left.minY, width: right.minX - left.maxX, height: left.height)
+            if notch.intersects(rect.insetBy(dx: 2, dy: 2)) { return false }
+        }
+        return true
+    }
+
+    /// Park's menu bar icon on screen, or, when it's hidden, the spot just right of the notch where
+    /// the panel opens instead. The tour and the intro effect start here.
+    var statusAnchor: NSRect {
+        if isStatusItemVisible, let button = statusButton, let window = button.window {
+            return window.convertToScreen(button.convert(button.bounds, to: nil))
+        }
+        let screen = NSScreen.main ?? NSScreen.screens[0]
+        let menuBarHeight = screen.frame.maxY - screen.visibleFrame.maxY
+        let x = (screen.auxiliaryTopRightArea?.minX ?? screen.frame.midX) + 24
+        return NSRect(x: x, y: screen.frame.maxY - max(menuBarHeight, 24), width: 24, height: max(menuBarHeight, 24))
+    }
+
+    /// A panel element's frame in screen coordinates.
+    func screenRect(for anchor: TourAnchor) -> NSRect? {
+        guard panel.isVisible, let local = model.anchors[anchor] else { return nil }
+        let origin = panel.frame.origin, height = panel.frame.height
+        return NSRect(x: origin.x + local.minX, y: origin.y + height - local.maxY, width: local.width, height: local.height)
     }
 
     // MARK: - Layout
 
     private func position() {
-        guard let button = statusButton, let buttonWindow = button.window else { return }
-        let buttonRect = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
-        let screen = buttonWindow.screen ?? NSScreen.main
+        // When the icon is hidden behind the notch, open just right of it instead of nowhere.
+        let buttonRect = statusAnchor
+        let screen = (isStatusItemVisible ? statusButton?.window?.screen : nil) ?? NSScreen.main
         let visible = screen?.visibleFrame ?? .zero
         let height = panel.frame.height
 

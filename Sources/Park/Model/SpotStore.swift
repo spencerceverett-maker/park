@@ -15,7 +15,7 @@ final class SpotStore {
 
     static var defaultURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("Park", isDirectory: true).appendingPathComponent("spots.json")
+        return base.appendingPathComponent(DevMode.isOn ? "Park-dev" : "Park", isDirectory: true).appendingPathComponent("spots.json")
     }
 
     func insert(_ spot: Spot) {

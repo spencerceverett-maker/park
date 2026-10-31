@@ -11,6 +11,12 @@ enum Theme {
 
     /// Parking-sign blue, Park's brand color (the website, the logo, the walkthrough).
     static let brand = Color(red: 0x1E / 255, green: 0x50 / 255, blue: 0xA8 / 255)
+    /// The brand blue for text and outlines: deep on light backgrounds, lifted on dark ones so it stays legible.
+    static let brandText = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(srgbRed: 0x7A / 255, green: 0xA6 / 255, blue: 0xEC / 255, alpha: 1)
+            : NSColor(srgbRed: 0x1E / 255, green: 0x50 / 255, blue: 0xA8 / 255, alpha: 1)
+    })
 
     static let hover = Color.primary.opacity(0.06)
     static let pressed = Color.primary.opacity(0.1)
