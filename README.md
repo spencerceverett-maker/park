@@ -6,6 +6,12 @@
 
 <p align="center"><strong>Park a desktop. Get your memory back. Pick up exactly where you left off.</strong></p>
 
+<p align="center">
+  <img src="docs/demo.gif" width="800" alt="Parking a desktop: three windows fold into Park's menu bar panel, memory use drops, and one click restores them">
+  <br>
+  <a href="docs/demo.mp4">Watch the full demo (MP4)</a>
+</p>
+
 Park is a tiny macOS menu bar app for people who keep one project per desktop (Space). When you're done with a project for now, park its desktop: Park remembers every window on it, closes them, and quits apps you weren't using anywhere else. When you come back, one click reopens it all, with the same tabs, files, folders and window positions.
 
 No setup, no presets, no config files.

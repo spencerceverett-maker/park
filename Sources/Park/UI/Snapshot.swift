@@ -24,13 +24,16 @@ enum Snapshot {
         model.memory = MemoryStats(used: 12_400_000_000, total: 17_179_869_184)
         if arguments.contains("--toast") { model.toast = Toast(message: "Deleted “Website refresh”", undo: {}) }
 
+        // --clear leaves the background transparent, for compositing over a real material.
+        let clear = arguments.contains("--clear")
         let view = PanelView()
             .environment(model)
-            .background(Color(nsColor: dark ? NSColor(white: 0.16, alpha: 1) : NSColor(white: 0.97, alpha: 1)))
+            .background(clear ? Color.clear : Color(nsColor: dark ? NSColor(white: 0.16, alpha: 1) : NSColor(white: 0.97, alpha: 1)))
             .environment(\.colorScheme, dark ? .dark : .light)
 
         let renderer = ImageRenderer(content: view)
-        renderer.scale = 2
+        renderer.scale = arguments.contains("--3x") ? 3 : 2
+        renderer.isOpaque = !clear
         guard let image = renderer.nsImage,
               let tiff = image.tiffRepresentation,
               let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else {
