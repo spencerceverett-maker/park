@@ -659,7 +659,6 @@ kbd {
 /* Icons are Lucide (ISC); each sets its own optical size via width/height. */
 .glyph svg { display: block; flex: none; }
 .glyph { background: var(--glyph); }
-.g-blue { background: var(--blue); }
 
 .features-intro strong { color: var(--ink); font-weight: 600; }
 
