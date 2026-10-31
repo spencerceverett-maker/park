@@ -19,7 +19,7 @@ func rgb(_ hex: UInt32, _ al: CGFloat = 1) -> NSColor {
 func R(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> NSRect { NSRect(x: x * k, y: (H - y - h) * k, width: w * k, height: h * k) }
 var cg: CGContext { NSGraphicsContext.current!.cgContext }
 
-enum Palette { case violet, dusk, mono }
+enum Palette { case violet, dusk, mono, dawn }
 func wallpaper(_ size: CGSize, _ p: Palette = .violet) -> CGImage {
     let base: NSColor, blobs: [(CGFloat, CGFloat, CGFloat, NSColor)]
     switch p {
@@ -30,6 +30,11 @@ func wallpaper(_ size: CGSize, _ p: Palette = .violet) -> CGImage {
     case .dusk:
         base = rgb(0x120F2E)
         blobs = [(0.2, 0.2, 0.5, rgb(0xFF7A59, 0.9)), (0.8, 0.3, 0.5, rgb(0x6D4AFF, 0.9)), (0.5, 0.9, 0.6, rgb(0x1E2A78)), (0.9, 0.9, 0.4, rgb(0xF2B8A0, 0.6))]
+    case .dawn:
+        // The website's hero: a Mac desktop just before sunrise, blues only (hue 211–219°).
+        base = rgb(0x163E86)
+        blobs = [(0.05, 1.00, 0.70, rgb(0x0B1B36)), (0.55, 0.85, 0.45, rgb(0x163E86)), (0.60, 0.45, 0.55, rgb(0x1E50A8)),
+                 (0.85, 0.15, 0.55, rgb(0x9CC0EA)), (0.40, -0.05, 0.55, rgb(0xCFE0F5)), (0.95, -0.05, 0.35, rgb(0xE3EEFA, 0.9))]
     case .mono:
         base = rgb(0xD9DBE3)
         blobs = [(0.2, 0.8, 0.6, rgb(0xFFFFFF)), (0.8, 0.2, 0.6, rgb(0xB8BCCB)), (0.6, 0.6, 0.4, rgb(0xEEF0F6))]
@@ -194,7 +199,7 @@ render(3, "centered-hero") {
 
 // 4 — Full bleed: wallpaper everywhere, white type on color, glass panel.
 render(4, "full-bleed") {
-    let wall = wallpaper(CGSize(width: W * k, height: H * k)); let wr = NSRect(x: 0, y: 0, width: W * k, height: H * k)
+    let wall = wallpaper(CGSize(width: W * k, height: H * k), .dawn); let wr = NSRect(x: 0, y: 0, width: W * k, height: H * k)
     cg.draw(wall, in: wr)
     menuBar(x: 0, y: 0, w: W, parkX: 960)
     icon.draw(in: R(80, 170, 52, 52))
