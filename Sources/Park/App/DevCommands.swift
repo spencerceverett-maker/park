@@ -3,13 +3,15 @@ import AppKit
 /// Command-line entry points for checking the engine without the UI.
 ///   Park --dry-run    print what parking this desktop would save; closes nothing
 ///   Park --self-test  open throwaway windows, park and restore only those, and report
-///   Park --intro-lab  play the first-launch intro candidates live and compare them
+///   Park --intro-lab [--tune [--loop]]  play the first-launch intro candidates live and compare them;
+///                     --tune opens Fireflies' tuning panel, --loop starts it replaying
 ///   Park --intro=<ripple|dawn|clearing|lanes> [--speed=0.5] [--anchor=clock]  play one, then quit
 ///   Park --intro-frames=<name|all> <outdir> [--background=<png>]  render stills for design review
 enum DevCommands {
     static func run(_ arguments: [String]) -> Bool {
         if arguments.contains("--intro-lab") {
-            MainActor.assumeIsolated { IntroLab.run() }
+            let tuning = arguments.contains("--tune"), looping = arguments.contains("--loop")
+            MainActor.assumeIsolated { IntroLab.run(tuning: tuning, looping: looping) }
             return true
         }
         if let flag = arguments.first(where: { $0.hasPrefix("--intro=") }),

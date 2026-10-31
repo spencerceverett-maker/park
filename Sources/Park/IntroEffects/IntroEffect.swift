@@ -66,7 +66,6 @@ final class IntroRenderer {
     let queue: MTLCommandQueue
     private var pipelines: [IntroEffect: MTLRenderPipelineState] = [:]
     private var motes: MTLRenderPipelineState?
-    static let moteCount = 320
 
     init?(device: MTLDevice? = MTLCreateSystemDefaultDevice()) {
         guard let device, let queue = device.makeCommandQueue() else { return nil }
@@ -102,19 +101,23 @@ final class IntroRenderer {
         self.queue = queue
     }
 
-    func encode(_ effect: IntroEffect, into pass: MTLRenderPassDescriptor, buffer: MTLCommandBuffer, uniforms: IntroUniforms) {
+    func encode(_ effect: IntroEffect, into pass: MTLRenderPassDescriptor, buffer: MTLCommandBuffer, uniforms: IntroUniforms,
+                fireflies: FireflyParams = FireflyParams()) {
         guard let pipeline = pipelines[effect] else { return }
         pass.colorAttachments[0].loadAction = .clear
         pass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
         guard let encoder = buffer.makeRenderCommandEncoder(descriptor: pass) else { return }
         var u = uniforms
+        var f = fireflies
         encoder.setRenderPipelineState(pipeline)
         encoder.setFragmentBytes(&u, length: MemoryLayout<IntroUniforms>.stride, index: 0)
+        encoder.setFragmentBytes(&f, length: MemoryLayout<FireflyParams>.stride, index: 1)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
-        if effect == .fireflies, let motes {
+        if effect == .fireflies, let motes, f.instanceCount > 0 {
             encoder.setRenderPipelineState(motes)
             encoder.setVertexBytes(&u, length: MemoryLayout<IntroUniforms>.stride, index: 0)
-            encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: Self.moteCount)
+            encoder.setVertexBytes(&f, length: MemoryLayout<FireflyParams>.stride, index: 1)
+            encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: f.instanceCount)
         }
         encoder.endEncoding()
     }
@@ -198,26 +201,38 @@ enum IntroAnchor {
 }
 
 /// Plays one effect over the whole main screen, click-through and above everything, skippable with any
-/// click or key. Never plays with Reduce Motion on.
+/// click or key. Never plays with Reduce Motion on (the lab overrides this).
 @MainActor
 final class IntroEffectPlayer: NSObject, MTKViewDelegate {
     private var window: NSWindow?
     private var renderer: IntroRenderer?
     private var effect: IntroEffect = .ripple
-    private var speed: Double = 1
+    var speed: Double = 1                 // 1 for real time, 0.5 to study the motion; may change mid-play
     private var origin: CGPoint = .zero   // global top-left points
-    private var start = CACurrentMediaTime()
+    private var elapsed: Double = 0        // effect seconds, advanced each frame so speed can change mid-play
+    private var lastFrame = CACurrentMediaTime()
     private var skippedAt: CFTimeInterval?
     private var monitors: [Any] = []
     private var done: () -> Void = {}
+    /// Replays continuously until stopped, for tuning.
+    private var loop = false
+
+    /// Fireflies' values, read every frame, so the tuning panel changes the effect while it plays.
+    var fireflies = FireflyParams()
 
     var isPlaying: Bool { window != nil }
+    var isLooping: Bool { isPlaying && loop }
+
+    private var duration: Double { effect == .fireflies ? fireflies.duration : effect.duration }
+    private var rate: Double { speed * (effect == .fireflies ? Double(fireflies.speed) : 1) }
 
     /// - Parameters:
     ///   - origin: Park's icon in global top-left points (see `IntroAnchor`).
     ///   - speed: 1 for real time, 0.5 to study the motion.
+    ///   - skippable: whether a click or key anywhere skips it. Off while tuning, so the panel stays usable.
+    ///   - loop: replay continuously until `stop()`.
     func play(_ effect: IntroEffect, origin: CGPoint, speed: Double = 1, respectReduceMotion: Bool = true,
-              done: @escaping () -> Void = {}) {
+              skippable: Bool = true, loop: Bool = false, done: @escaping () -> Void = {}) {
         stop()
         guard let screen = NSScreen.main, let renderer = renderer ?? IntroRenderer(),
               !(respectReduceMotion && NSWorkspace.shared.accessibilityDisplayShouldReduceMotion) else {
@@ -228,6 +243,7 @@ final class IntroEffectPlayer: NSObject, MTKViewDelegate {
         self.speed = speed
         self.origin = origin
         self.done = done
+        self.loop = loop
         skippedAt = nil
 
         let window = NSWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
@@ -250,8 +266,10 @@ final class IntroEffectPlayer: NSObject, MTKViewDelegate {
         window.contentView = view
         window.orderFrontRegardless()
         self.window = window
-        start = CACurrentMediaTime()
+        elapsed = 0
+        lastFrame = CACurrentMediaTime()
 
+        guard skippable else { return }
         let skip: (NSEvent) -> Void = { [weak self] _ in self?.skip() }
         if let m = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown], handler: skip) { monitors.append(m) }
         if let m = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown], handler: { [weak self] e in self?.skip(); return e }) { monitors.append(m) }
@@ -273,16 +291,24 @@ final class IntroEffectPlayer: NSObject, MTKViewDelegate {
               let pass = view.currentRenderPassDescriptor, let drawable = view.currentDrawable,
               let buffer = renderer.queue.makeCommandBuffer() else { return }
         let now = CACurrentMediaTime()
-        let t = (now - start) * speed
+        elapsed += min(now - lastFrame, 0.1) * rate
+        lastFrame = now
         let fade = skippedAt.map { min(1, (now - $0) / 0.25) } ?? 0
-        if t >= effect.duration || fade >= 1 { finish(); return }
+        if fade >= 1 { finish(); return }
+        if elapsed >= duration {
+            // Looping: a short pause of empty screen, then again.
+            guard loop else { finish(); return }
+            elapsed = -0.5
+        }
+        let t = elapsed
 
         let size = view.drawableSize
         let scale = size.width / max(1, screen.frame.width)
         let originPx = CGPoint(x: (origin.x - screen.frame.minX) * scale, y: origin.y * scale)
         renderer.encode(effect, into: pass, buffer: buffer, uniforms: IntroUniforms(
             time: Float(t), fadeOut: Float(fade), resolution: SIMD2(Float(size.width), Float(size.height)),
-            origin: SIMD2(Float(originPx.x), Float(originPx.y)), scale: Float(scale), duration: Float(effect.duration)))
+            origin: SIMD2(Float(originPx.x), Float(originPx.y)), scale: Float(scale), duration: Float(duration)),
+            fireflies: fireflies)
         buffer.present(drawable)
         buffer.commit()
     }

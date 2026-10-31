@@ -331,15 +331,38 @@ enum IntroShaders {
         return finish(rgb, a, in.position.xy, t, u.fadeOut);
     }
 
-    // 7 · Fireflies — the screen-wide part: a faint pull of blue where the motes converge, then the ring.
-    // The motes themselves are drawn by moteVertex/moteFragment.
-    fragment float4 firefliesFragment(VOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {
+    // 7 · Fireflies — motes of light drift on a current, then gather into a ring around the icon. Every value
+    // is tunable (FireflyParams in Swift; the field order here must match it).
+    struct Fireflies {
+        float count, size, sizeVariation, softness;
+        float opacity, opacityVariation, twinkle, twinkleSpeed;
+        float depth, scatter, driftSpeed, swirl, turbulence;
+        float gatherTime, stagger;
+        float colorMix, whiteCore, glow;
+        float ringSize, ringSoftness, speed;
+    };
+
+    // When the last motes arrive on the ring.
+    static float ffArrival(constant Fireflies& f) { return 0.35 + f.stagger + f.gatherTime * 1.2; }
+
+    // The ring, with its own size and softness.
+    static void ring(thread float3& rgb, thread float& a, float d, float R, float soft, float amount) {
+        float x = d - R;
+        tint(rgb, a, SIGN, (exp(-d / (R * 2.7)) * 0.16 + gauss(x, mix(3.0, 10.0, soft)) * 0.2) * amount);
+        light(rgb, a, mix(DAWN, FIRST, 0.6),
+              (gauss(x, mix(1.2, 4.5, soft)) * mix(0.85, 0.5, soft) + exp(-abs(x) / mix(5.0, 14.0, soft)) * 0.22) * amount);
+    }
+
+    // The screen-wide part: a faint pull of blue where the motes converge, then the ring.
+    fragment float4 firefliesFragment(VOut in [[stage_in]], constant Uniforms& u [[buffer(0)]],
+                                      constant Fireflies& f [[buffer(1)]]) {
         float t = u.time;
         float2 p = (in.position.xy - u.origin) / u.scale;
         float d = length(p);
+        float E = ffArrival(f);
         float3 rgb = float3(0.0); float a = 0.0;
-        tint(rgb, a, SIGN, exp(-d / 240.0) * 0.07 * window(t, 0.7, 1.6, 2.2, 2.9));
-        halo(rgb, a, d, window(t, 1.75, 2.25, 2.5, 3.0));
+        tint(rgb, a, SIGN, exp(-d / 240.0) * 0.07 * window(t, 0.7, max(E - 0.6, 0.8), E, E + 0.6));
+        ring(rgb, a, d, f.ringSize, f.ringSoftness, window(t, E - 0.6, E - 0.1, E + 0.2, E + 0.7));
         return finish(rgb, a, in.position.xy, t, u.fadeOut);
     }
 
@@ -351,43 +374,75 @@ enum IntroShaders {
                       potential(q - float2(e, 0)) - potential(q + float2(e, 0))) / (2.0 * e);
     }
 
-    struct MoteOut { float4 position [[position]]; float2 local; float size; float bright; };
+    struct MoteOut {
+        float4 position [[position]];
+        float2 local;   // points from the mote's center
+        float size, ext, soft, tone, bokeh, bright;
+    };
 
-    vertex MoteOut moteVertex(uint vid [[vertex_id]], uint iid [[instance_id]], constant Uniforms& u [[buffer(0)]]) {
+    vertex MoteOut moteVertex(uint vid [[vertex_id]], uint iid [[instance_id]], constant Uniforms& u [[buffer(0)]],
+                              constant Fireflies& f [[buffer(1)]]) {
         float fi = float(iid), t = u.time;
         float h1 = hash(float2(fi, 1.3)), h2 = hash(float2(fi, 4.7)), h3 = hash(float2(fi, 8.1)), h4 = hash(float2(fi, 2.9));
+        float h5 = hash(float2(fi, 6.2)), h6 = hash(float2(fi, 9.4)), h7 = hash(float2(fi, 3.6));
         float W = u.resolution.x / u.scale, H = u.resolution.y / u.scale;
-        float2 pos = float2(h1 * W, 0.04 * H + h2 * 0.96 * H) - u.origin / u.scale;
+        float E = ffArrival(f);
+        // A few motes are out of focus, close to the eye: larger, softer, dimmer, and drifting faster.
+        bool bokeh = h5 < f.depth;
 
-        // Drift on the current.
-        float drift = min(t, 2.4);
+        float2 pos = float2(0.5 * W, 0.52 * H) + (float2(h1, h2) - 0.5) * float2(W, H) * f.scatter - u.origin / u.scale;
+        float drift = min(t, E);
+        float noiseScale = mix(520.0, 140.0, f.turbulence);
         for (int k = 0; k < 8; k++) {
-            pos += curl(pos / 280.0 + float2(0.0, float(k) * 0.04)) * drift / 8.0 * 34.0;
+            pos += curl(pos / noiseScale + float2(0.0, float(k) * 0.04)) * drift / 8.0 * f.driftSpeed * (bokeh ? 1.5 : 1.0);
         }
-        // Then gathered: each on its own schedule, spiralling into a place on the ring.
-        float g = easeInOut((t - (0.45 + h3 * 0.6)) / (0.95 + h4 * 0.5));
+        // Each heads in on its own schedule, spiralling into a place on the ring.
+        float g = easeInOut((t - (0.35 + h3 * f.stagger)) / max(f.gatherTime * (0.8 + 0.4 * h4), 0.05));
         float theta = h2 * 6.2831853 + t * 0.5;
-        float2 target = float2(cos(theta), sin(theta)) * (HALO_R + (h1 - 0.5) * 5.0);
-        pos = target + rot(pos - target, g * 1.2) * (1.0 - g);
+        float2 target = float2(cos(theta), sin(theta)) * (f.ringSize + (h1 - 0.5) * mix(2.0, 8.0, f.ringSoftness));
+        pos = target + rot(pos - target, g * f.swirl) * (1.0 - g);
 
         MoteOut out;
-        out.size = mix(1.2, 2.8, h4 * h4) * (1.0 - 0.3 * g);
-        float ext = out.size * 6.0;
+        // Power-law sizes: most motes are small, a few are noticeably larger.
+        float size = f.size * min(pow(1.0 / (1.0 - 0.985 * h6), f.sizeVariation), 9.0);
+        out.size = bokeh ? max(size * 2.6, 5.0) : mix(size, min(size, 2.4), g) * (1.0 - 0.4 * g);
+        out.soft = bokeh ? 1.0 : f.softness;
+        out.ext = out.size * mix(3.0, 7.0, out.soft) * (1.0 + f.glow * 1.5);
+        out.tone = clamp(f.colorMix + (h4 - 0.5) * 0.5, 0.0, 1.0);
+        out.bokeh = bokeh ? 1.0 : 0.0;
         float2 corner = float2(float(vid & 1), float(vid >> 1)) * 2.0 - 1.0;
-        out.local = corner * ext;
+        out.local = corner * out.ext;
         float2 pixel = u.origin + (pos + out.local) * u.scale;
         out.position = float4(pixel.x / u.resolution.x * 2.0 - 1.0, 1.0 - pixel.y / u.resolution.y * 2.0, 0.0, 1.0);
-        out.bright = smoothstep(0.0, 0.35 + h1 * 0.5, t) * (0.8 + 0.2 * sin(t * 2.6 + h2 * 40.0))
-                   * (1.0 - smoothstep(2.35, 2.85, t)) * (1.0 - u.fadeOut);
+
+        float twinkle = 1.0 - f.twinkle * 0.5 * (1.0 + sin(t * f.twinkleSpeed * (0.7 + 0.6 * h4) + h2 * 40.0));
+        float alpha = f.opacity * (1.0 - f.opacityVariation * h7) * (bokeh ? 0.32 : 1.0);
+        out.bright = smoothstep(0.0, 0.35 + h1 * 0.5, t) * twinkle * alpha
+                   * (1.0 - smoothstep(E + 0.1, E + 0.6, t)) * (1.0 - u.fadeOut)
+                   * (bokeh ? 1.0 - smoothstep(0.3, 0.9, g) : 1.0 - 0.35 * g);
         return out;
     }
 
-    fragment float4 moteFragment(MoteOut in [[stage_in]]) {
-        float dd = length(in.local);
+    fragment float4 moteFragment(MoteOut in [[stage_in]], constant Fireflies& f [[buffer(1)]]) {
+        float dd = length(in.local) / in.size;
+        float3 color = mix(SIGN, HORIZON, in.tone);
         float3 rgb = float3(0.0); float a = 0.0;
-        tint(rgb, a, SIGN, gauss(dd, in.size * 1.7) * 0.55 + exp(-dd / (in.size * 2.2)) * 0.12);
-        light(rgb, a, mix(DAWN, FIRST, 0.5), gauss(dd, in.size * 0.7) * 0.7 + exp(-dd / (in.size * 1.6)) * 0.12);
-        return float4(rgb, a) * in.bright;
+        if (in.bokeh > 0.5) {
+            // Out of focus: a soft disc with a faint brighter rim, like a lens renders it.
+            float body = (1.0 - smoothstep(0.7, 1.0, dd)) * 0.5 + gauss(dd - 0.9, 0.09) * 0.3;
+            tint(rgb, a, mix(SIGN, color, 0.3), body * 0.55);
+            light(rgb, a, color, body * 0.25);
+        } else {
+            float sigma = mix(0.55, 1.1, in.soft);
+            float core = gauss(dd, sigma);
+            tint(rgb, a, mix(SIGN, color, 0.2), gauss(dd, sigma * 1.7) * 0.6 + exp(-dd / mix(0.8, 2.4, in.soft)) * 0.16);
+            light(rgb, a, color, core * mix(0.75, 0.45, in.soft));
+            if (f.whiteCore > 0.5) light(rgb, a, FIRST, gauss(dd, sigma * 0.4) * 0.5);
+        }
+        light(rgb, a, color, exp(-dd / (2.5 + 3.0 * in.soft)) * f.glow * 0.35);
+        // Fade out before the edge of the sprite so no square ever shows.
+        float edge = 1.0 - smoothstep(0.75, 1.0, length(in.local) / in.ext);
+        return float4(rgb, a) * in.bright * edge;
     }
 
     // 8 · Tide — a soft wave of light rolls in from every edge with an uneven, foamy front and closes in

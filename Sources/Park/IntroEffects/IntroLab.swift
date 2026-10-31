@@ -7,13 +7,20 @@ import SwiftUI
 @MainActor
 @Observable
 final class IntroLabModel {
-    var speed: Double = 1
+    var speed: Double = 1 { didSet { player.speed = speed } }
     var anchor: IntroAnchor.Source = .parkIcon
     var foundParkIcon = false
     var playing: IntroEffect?
 
+    // Fireflies tuning.
+    var tuning = false
+    var looping = false
+    var params = FireflyParams() { didSet { player.fireflies = params } }
+    var presetNames: [String] = []
+
     @ObservationIgnored let player = IntroEffectPlayer()
     @ObservationIgnored var setWindowVisible: (Bool) -> Void = { _ in }
+    @ObservationIgnored var setTunerVisible: (Bool) -> Void = { _ in }
     @ObservationIgnored private var queue: [IntroEffect] = []
 
     func refreshAnchor() {
@@ -30,8 +37,70 @@ final class IntroLabModel {
         start(IntroEffect.allCases[0])
     }
 
+    func setTuning(_ on: Bool) {
+        tuning = on
+        if !on { setLooping(false) }
+        setTunerVisible(on)
+    }
+
+    /// Replays Fireflies continuously over the screen while the panels stay usable.
+    func setLooping(_ on: Bool) {
+        if on {
+            queue = []
+            looping = true
+            playing = .fireflies
+            player.play(.fireflies, origin: IntroAnchor.locate(prefer: anchor).point, speed: speed,
+                        respectReduceMotion: false, skippable: false, loop: true)
+        } else if looping {
+            looping = false
+            playing = nil
+            player.stop()
+        }
+    }
+
+    func playFirefliesOnce() {
+        queue = []
+        looping = false
+        playing = .fireflies
+        player.play(.fireflies, origin: IntroAnchor.locate(prefer: anchor).point, speed: speed,
+                    respectReduceMotion: false, skippable: false) { [weak self] in self?.playing = nil }
+    }
+
+    func resetParams() { params = FireflyParams() }
+
+    func randomize() {
+        var next = params
+        for dial in FireflyDial.sections.flatMap(\.dials) {
+            next[keyPath: dial.key] = Float.random(in: dial.taste)
+        }
+        next.speed = 1
+        params = next
+    }
+
+    func copyParams() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(params.json, forType: .string)
+    }
+
+    func refreshPresets() { presetNames = FireflyPresets.all().keys.sorted() }
+
+    func savePreset(_ name: String) {
+        FireflyPresets.save(params, as: name)
+        refreshPresets()
+    }
+
+    func loadPreset(_ name: String) {
+        if let preset = FireflyPresets.all()[name] { params = preset }
+    }
+
+    func deletePreset(_ name: String) {
+        FireflyPresets.delete(name)
+        refreshPresets()
+    }
+
     private func start(_ effect: IntroEffect) {
         let origin = IntroAnchor.locate(prefer: anchor).point
+        looping = false
         playing = effect
         // Step out of the way so the effect has the whole screen.
         setWindowVisible(false)
@@ -115,6 +184,9 @@ private struct EffectRow: View {
     var effect: IntroEffect
     @State private var hovering = false
 
+    /// The effect being tuned stays highlighted.
+    private var selected: Bool { model.tuning && effect == .fireflies }
+
     var body: some View {
         Button { model.play(effect) } label: {
             HStack(alignment: .top, spacing: 12) {
@@ -132,6 +204,8 @@ private struct EffectRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
+                // Room for the tune button, which sits on top so it gets its own clicks.
+                if effect == .fireflies { Color.clear.frame(width: 28, height: 28) }
                 Image(systemName: "play.fill")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(hovering ? .white : Theme.brand)
@@ -141,10 +215,27 @@ private struct EffectRow: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(hovering ? Theme.hover : .clear))
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(hovering || selected ? Theme.hover : .clear))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Theme.brand.opacity(selected ? 0.35 : 0), lineWidth: 1))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .overlay(alignment: .topTrailing) {
+            if effect == .fireflies {
+                Button { model.setTuning(!model.tuning) } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(model.tuning ? .white : Theme.brand)
+                        .frame(width: 28, height: 28)
+                        .background(Circle().fill(model.tuning ? Theme.brand : Theme.brand.opacity(0.1)))
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 10 + 28 + 12)
+                .padding(.top, 7)
+                .help(model.tuning ? "Close the tuning panel" : "Tune Fireflies live")
+            }
+        }
         .onHover { hovering = $0 }
         .keyboardShortcut(KeyEquivalent(Character(String(number))), modifiers: [])
         .help("Play \(effect.title) (\(number))")
@@ -167,7 +258,10 @@ private struct LabButtonStyle: ButtonStyle {
 
 enum IntroLab {
     @MainActor
-    static func run() {
+    /// - Parameters:
+    ///   - tuning: open with Fireflies' tuning panel showing.
+    ///   - looping: and start Fireflies replaying.
+    static func run(tuning: Bool = false, looping: Bool = false) {
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
         let model = IntroLabModel()
@@ -195,11 +289,34 @@ enum IntroLab {
             if visible { window.makeKeyAndOrderFront(nil) }
         }
 
+        // Fireflies' tuning panel floats beside the lab and stays usable while the effect loops.
+        let tuner = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 600),
+                             styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
+        tuner.titleVisibility = .hidden
+        tuner.titlebarAppearsTransparent = true
+        tuner.isMovableByWindowBackground = true
+        tuner.level = .floating
+        tuner.isReleasedWhenClosed = false
+        let tunerHosting = NSHostingView(rootView: FireflyTunerView().environment(model))
+        tuner.contentView = tunerHosting
+        tuner.setContentSize(tunerHosting.fittingSize)
+        tuner.setFrameOrigin(NSPoint(x: window.frame.maxX + 12, y: window.frame.minY))
+        let tunerCloser = TunerCloser { model.setTuning(false) }
+        tuner.delegate = tunerCloser
+        model.setTunerVisible = { [weak tuner] visible in
+            guard let tuner else { return }
+            if visible { tuner.orderFront(nil) } else { tuner.orderOut(nil) }
+        }
+
         let closer = WindowCloser()
         window.delegate = closer
         window.makeKeyAndOrderFront(nil)
+        if tuning {
+            model.setTuning(true)
+            if looping { DispatchQueue.main.async { model.setLooping(true) } }
+        }
         app.activate(ignoringOtherApps: true)
-        withExtendedLifetime((closer, model)) { app.run() }
+        withExtendedLifetime((closer, tunerCloser, tuner, model)) { app.run() }
     }
 
     /// Plays one effect once from the command line, then quits: `Park --intro=ripple [--speed=0.5]`.
@@ -219,5 +336,12 @@ enum IntroLab {
 
     private final class WindowCloser: NSObject, NSWindowDelegate {
         func windowWillClose(_ notification: Notification) { NSApp.terminate(nil) }
+    }
+
+    /// Closing the tuning panel just hides it (and stops the loop).
+    private final class TunerCloser: NSObject, NSWindowDelegate {
+        let onClose: () -> Void
+        init(onClose: @escaping () -> Void) { self.onClose = onClose }
+        func windowShouldClose(_ sender: NSWindow) -> Bool { onClose(); return false }
     }
 }
