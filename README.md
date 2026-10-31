@@ -51,7 +51,7 @@ cd park
 
 The build only needs Apple's Command Line Tools (`xcode-select --install`); you don't need Xcode.
 
-On first launch Park asks for **Accessibility** access, which it uses to find, close and place windows. The first time it parks Chrome or Finder, macOS asks once more to let Park control them. Everything stays on your Mac: Park saves parked desktops as JSON in `~/Library/Application Support/Park/`.
+Park adds itself to your login items on first launch, so it's always there after a restart (switch **Open at Login** off in the ··· menu if you'd rather not). On first launch it also asks for **Accessibility** access, which it uses to find, close and place windows. The first time it parks Chrome or Finder, macOS asks once more to let Park control them. Everything stays on your Mac: Park saves parked desktops as JSON in `~/Library/Application Support/Park/`.
 
 **Code signing:** unsigned (ad hoc) builds lose the Accessibility permission each time you rebuild. To avoid that, sign with any certificate in your keychain (`security find-identity -p codesigning`), either by exporting `PARK_SIGN_IDENTITY` or by putting it in `scripts/signing.local`:
 

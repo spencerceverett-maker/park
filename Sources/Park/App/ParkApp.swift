@@ -39,6 +39,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         panel = PanelController(model: model, statusButton: statusItem.button!)
 
+        // A menu bar app you forget to launch is no help: open at login by default.
+        // Turning it off in the ··· menu is remembered and never overridden.
+        if !UserDefaults.standard.bool(forKey: "didSetUpLoginItem") {
+            LoginItem.set(true)
+            UserDefaults.standard.set(true, forKey: "didSetUpLoginItem")
+        }
+
         // ⌃⌥P opens the panel, even when the menu bar icon is hidden behind the notch.
         panelHotKey = HotKey(keyCode: 35, modifiers: [.control, .option]) { [weak self] in
             self?.panel.toggle()

@@ -7,7 +7,7 @@ enum LoginItem {
         do {
             if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
         } catch {
-            NSLog("Park: login item change failed: \(error)")
+            Log.write("login item change failed: \(error)")
         }
     }
 }
