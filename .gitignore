@@ -6,3 +6,4 @@ video/node_modules
 video/out
 .vercel
 .env*
+.claude/
