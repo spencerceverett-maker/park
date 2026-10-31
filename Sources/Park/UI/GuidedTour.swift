@@ -101,8 +101,23 @@ final class GuidedTour {
              CalloutContent(title: "Park needs permission to see your windows.",
                             body: "Open System Settings and turn on Park under Accessibility. The tour carries on by itself.",
                             action: "Open System Settings", secondary: "Not now"),
-             action: { [weak self] in self?.model.requestAccessibility() },
+             action: { [weak self] in self?.openSettingsForAccess() },
              secondary: { [weak self] in self?.finish(note: "Whenever you’re ready, ⌃⌥P opens Park.") })
+    }
+
+    private func openSettingsForAccess() {
+        model.requestAccessibility()
+        // The switch can already be on and still not count: macOS remembers an older copy of Park (a
+        // different build, or one since replaced) under the same name. Say how out of that, rather than wait.
+        after(12) { [weak self] in
+            guard let self, self.step == .access, !AXIsProcessTrusted() else { return }
+            self.show(anchor: .element(.permissionButton),
+                      CalloutContent(title: "Already turned on?",
+                                     body: "macOS may be remembering an older copy of Park. Select Park in the list and click –, then click below to add it again.",
+                                     action: "Open System Settings", secondary: "Not now"),
+                      action: { [weak self] in self?.model.requestAccessibility() },
+                      secondary: { [weak self] in self?.finish(note: "Whenever you’re ready, ⌃⌥P opens Park.") })
+        }
     }
 
     private func accessGranted() {
