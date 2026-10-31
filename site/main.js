@@ -3,8 +3,7 @@
 const CONFIG = {
   // Set to the signed, notarized download (e.g. a GitHub release asset) once the Developer ID is in place.
   DOWNLOAD_URL: "https://github.com/spencerceverett-maker/park/releases/latest/download/Park.zip",
-  // TODO: set to the tip page (Buy Me a Coffee or Ko-fi) once the account exists.
-  TIP_URL: null,
+  TIP_URL: "https://ko-fi.com/spencereverett",
   REPO_URL: "https://github.com/spencerceverett-maker/park",
 };
 
@@ -40,7 +39,14 @@ function wireLinks() {
   };
   chips.forEach((chip) => chip.addEventListener("click", () => choose(chip)));
   tip.href = CONFIG.TIP_URL ?? CONFIG.REPO_URL;
-  if (!CONFIG.TIP_URL) {
+  if (CONFIG.TIP_URL) {
+    // Ko-fi picks the amount on its own page, so the chips here would only promise something it ignores.
+    tip.textContent = "Buy me a coffee";
+    tip.target = "_blank";
+    tip.rel = "noopener";
+    tipNote.textContent = "Tips go through Ko-fi. Park itself never asks for money.";
+    $(".tips").hidden = true;
+  } else {
     tip.textContent = "Star Park on GitHub";
     tipNote.textContent = "The tip jar opens soon. Until then, a star on GitHub helps more people find Park.";
     $(".tips").hidden = true;

@@ -114,6 +114,10 @@ build/Park.app/Contents/MacOS/Park --self-test   # open throwaway windows, park 
 - Apps without specific support come back by relaunching. That relies on the app restoring its own windows, which most do, unless "Close windows when quitting an application" is turned on in System Settings → Desktop & Dock.
 - Only the active display's desktop is parked.
 
+## Support
+
+Park is free and always will be. If it gives you back your afternoon, you can [buy me a coffee on Ko-fi](https://ko-fi.com/spencereverett).
+
 ## License
 
 [MIT](LICENSE)
