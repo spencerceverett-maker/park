@@ -1,6 +1,10 @@
-# Park
+<p align="center">
+  <img src="docs/icon.png" width="128" height="128" alt="Park app icon">
+</p>
 
-**Park a desktop. Get your memory back. Pick up exactly where you left off.**
+<h1 align="center">Park</h1>
+
+<p align="center"><strong>Park a desktop. Get your memory back. Pick up exactly where you left off.</strong></p>
 
 Park is a tiny macOS menu bar app for people who keep one project per desktop (Space). When you're done with a project for now, park its desktop: Park remembers every window on it, closes them, and quits apps you weren't using anywhere else. When you come back, one click reopens it all, with the same tabs, files, folders and window positions.
 
@@ -24,7 +28,7 @@ Each parked desktop shows how much memory parking it freed. The panel's footer s
 
 | App | Restored |
 | --- | --- |
-| **Chrome, Brave, Edge, Vivaldi, Chromium** | Every tab, in order, with the active tab, incognito mode and window position |
+| **Chrome, Brave, Edge, Vivaldi, Chromium** | Every tab, in order, with the active tab and window position. Incognito windows stay open, so their tabs are never written to disk |
 | **Figma** (desktop app) | Every file tab, including the page, selection and zoom you were on |
 | **Warp** | Every tab and split pane in its working directory. Commands that were running are recorded but not re-run |
 | **Finder** | The folder each window showed |
@@ -33,7 +37,7 @@ Each parked desktop shows how much memory parking it freed. The panel's footer s
 
 Apps whose windows were all on the parked desktop are quit, which frees the most memory. Apps you also use on other desktops just have that desktop's windows closed. A few companions stay running regardless: Finder, Slack, Messages, Mail, Calendar, Spotify, Music and Warp. You can turn quitting off in the ··· menu.
 
-Park never closes a window it can't bring back. If it can't read a window's contents, for example because a permission is missing, that window stays open and Park tells you why.
+Park never closes a window it can't bring back. If it can't read a window's contents, for example because a permission is missing, that window stays open and Park tells you why. It records everything before closing anything, so even a crash in the middle of parking can't lose windows: the next launch recovers them. If a terminal on the desktop is running something (a dev server, a CLI session), the panel warns you before you park.
 
 ## Install
 
@@ -59,7 +63,7 @@ echo 'PARK_SIGN_IDENTITY="Apple Development: you@example.com (TEAMID)"' > script
 
 A SwiftUI panel in a borderless `NSPanel`, plus a small engine:
 
-- **Finding windows on the current desktop:** `CGWindowList` and the Accessibility API, plus a few long-standing private CoreGraphics/SkyLight calls (the same ones AltTab, yabai and Hammerspoon use) to tell which Space each window is on. That means Park can't ship on the Mac App Store.
+- **Finding windows on the current desktop:** `CGWindowList` and the Accessibility API, plus a few long-standing private CoreGraphics/SkyLight calls (the same ones AltTab, yabai and Hammerspoon use) to tell which Space each window is on. They're looked up at runtime, so if a future macOS removes one, Park falls back to a conservative mode (it never quits apps) instead of failing to launch. This also means Park can't ship on the Mac App Store.
 - **Browsers:** AppleScript, with every value passed as typed arguments, never pasted into script text.
 - **Figma:** reads the open windows and tabs from Figma's own `settings.json` and reopens files with `figma://` links.
 - **Warp:** reads tabs, splits and directories from Warp's state database (read-only) and restores them through a temporary Warp launch configuration.
@@ -71,6 +75,12 @@ Sources/Park/
   Engine/   window discovery, per-app capture/close/restore
   Model/    parked desktops and their persistence
   UI/       SwiftUI views and design tokens
+```
+
+Tests cover naming, persistence (including corrupt and future-format data) and the app-specific formats:
+
+```bash
+swift test
 ```
 
 To check the engine without touching your real windows:

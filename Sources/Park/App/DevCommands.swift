@@ -25,6 +25,7 @@ enum DevCommands {
     }
 
     private static func dryRun() async {
+        print("Desktop detection: \(Private.hasSpaces && Private.getWindow != nil ? "full" : "conservative (private calls unavailable)")")
         do {
             let result = try await Engine().parkCurrentDesktop(quitApps: false, dryRun: true)
             print("Would park “\(result.spot.name)” — \(result.spot.summary)")
@@ -94,6 +95,7 @@ enum DevCommands {
         print("New windows on this desktop: \(fresh.count)")
         do {
             let result = try await engine.parkCurrentDesktop(quitApps: false, only: fresh)
+            SpotStore.clearPending()
             print("Parked “\(result.spot.name)”:")
             for window in result.spot.windows { print("  " + describe(window)) }
             for note in result.notes { print("  note: \(note)") }
@@ -110,6 +112,7 @@ enum DevCommands {
 
             // Check the browser tabs came back, then clean up.
             let check = try await engine.parkCurrentDesktop(quitApps: false, only: restored)
+            SpotStore.clearPending()
             for window in check.spot.windows { print("  back: " + describe(window)) }
             print("Cleaned up test windows.")
         } catch {

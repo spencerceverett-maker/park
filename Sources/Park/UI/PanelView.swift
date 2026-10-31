@@ -110,6 +110,11 @@ private struct DesktopSection: View {
                 Spacer(minLength: 0)
             }
 
+            if !preview.runningCommands.isEmpty {
+                RunningWarning(commands: preview.runningCommands)
+                    .transition(.opacity)
+            }
+
             Button {
                 Task { await model.park() }
             } label: {
@@ -144,6 +149,37 @@ private struct DesktopSection: View {
         case 1: return "1 window on this desktop"
         default: return "\(preview.windowCount) windows on this desktop"
         }
+    }
+}
+
+/// Parking closes terminal windows, and the terminal stops what was running in them shortly after.
+private struct RunningWarning: View {
+    var commands: [String]
+
+    private var text: String {
+        let shown = commands.prefix(2).map { "“\(Self.short($0))”" }
+        let rest = commands.count > 2 ? " and \(commands.count - 2) more" : ""
+        let list = shown.joined(separator: " and ") + rest
+        return commands.count == 1
+            ? "\(list) is running. It stops about a minute after parking and won’t restart on its own."
+            : "\(list) are running. They stop about a minute after parking and won’t restart on their own."
+    }
+
+    private static func short(_ command: String) -> String {
+        command.count > 28 ? String(command.prefix(27)) + "…" : command
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(.orange)
+            Text(text)
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .help(commands.joined(separator: "\n"))
     }
 }
 

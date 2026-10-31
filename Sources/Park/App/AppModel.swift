@@ -8,6 +8,8 @@ struct DesktopPreview: Equatable {
     var windowCount: Int
     var bundleIDs: [String]
     var appNames: [String]
+    /// Commands running in terminals on this desktop; they stop once their windows close.
+    var runningCommands: [String] = []
 
     static let empty = DesktopPreview(windowCount: 0, bundleIDs: [], appNames: [])
 }
@@ -46,6 +48,7 @@ final class AppModel {
     init(store: SpotStore = SpotStore(), engine: Engine = Engine()) {
         self.store = store
         self.engine = engine
+        if !Snapshot.isRendering { store.recoverPending() }
     }
 
     /// Quit apps whose windows are all on the parked desktop. Frees the most memory.
@@ -92,6 +95,7 @@ final class AppModel {
                 store.insert(spot)
                 justParkedID = spot.id
             }
+            SpotStore.clearPending()
             preview = await engine.preview()
             if let note = result.notes.first {
                 errorMessage = note

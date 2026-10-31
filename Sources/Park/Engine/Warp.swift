@@ -136,7 +136,7 @@ enum WarpAdapter {
     }
 
     /// JSON is valid YAML, and JSONSerialization handles all quoting.
-    private static func launchConfig(name: String, tabs: [TerminalTab], activeIndex: Int) throws -> String {
+    static func launchConfig(name: String, tabs: [TerminalTab], activeIndex: Int) throws -> String {
         func layout(_ node: TerminalLayout) -> [String: Any] {
             switch node {
             case .pane(let directory, _, let focused):

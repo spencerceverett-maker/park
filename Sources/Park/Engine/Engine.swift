@@ -31,7 +31,16 @@ final class Engine {
                 bundleIDs.append(id)
                 names.append(window.appName)
             }
-            return DesktopPreview(windowCount: windows.count, bundleIDs: bundleIDs, appNames: names)
+            var commands: [String] = []
+            let terminals = windows.filter { $0.bundleID == WarpAdapter.bundleID }
+            if !terminals.isEmpty {
+                for case .terminal(let tabs, _) in WarpAdapter.capture(terminals).values {
+                    for pane in tabs.flatMap(\.layout.panes) {
+                        if let command = pane.command, !commands.contains(command) { commands.append(command) }
+                    }
+                }
+            }
+            return DesktopPreview(windowCount: windows.count, bundleIDs: bundleIDs, appNames: names, runningCommands: commands)
         }
     }
 
@@ -70,6 +79,12 @@ final class Engine {
                     let matches = try Chrome.match(appWindows, snapshots, bundleID: bundleID)
                     for window in appWindows {
                         guard let snapshot = matches[window.windowID] else { leaveOpen.insert(window.windowID); continue }
+                        if snapshot.mode == "incognito" {
+                            // Saving incognito tabs to disk would defeat the point of incognito.
+                            leaveOpen.insert(window.windowID)
+                            notes.append("Incognito windows stay open, so their tabs are never saved.")
+                            continue
+                        }
                         contents[window.windowID] = .browser(
                             tabs: snapshot.tabs.map { BrowserTab(url: $0.url, title: $0.title) },
                             activeIndex: max(0, snapshot.activeTabIndex - 1),
@@ -151,6 +166,17 @@ final class Engine {
         let roots = Set(apps.keys)
         let before = Processes.footprint(ofTreesRootedAt: roots)
 
+        // Record everything before closing anything, so a crash mid-park can't lose windows.
+        let spotID = UUID()
+        func parked(_ windows: [ParkableWindow]) -> [ParkedWindow] {
+            windows.map {
+                ParkedWindow(bundleID: $0.bundleID!, appName: $0.appName, title: $0.title, frame: $0.frame,
+                             content: contents[$0.windowID] ?? .app)
+            }
+        }
+        let planned = parked(parkable)
+        SpotStore.writePending(Spot(id: spotID, name: Self.name(for: planned), createdAt: Date(), windows: planned))
+
         // Close. Apps that will be quit and have nothing app-specific to restore are just quit,
         // so their own state restoration brings their windows back on relaunch.
         var closed = Set<CGWindowID>()
@@ -182,17 +208,17 @@ final class Engine {
             notes.append("\(app.localizedName ?? "An app") is asking about unsaved changes.")
         }
 
-        let parked: [ParkedWindow] = parkable.filter { closed.contains($0.windowID) }.map { window in
-            ParkedWindow(bundleID: window.bundleID!, appName: window.appName, title: window.title,
-                         frame: window.frame, content: contents[window.windowID] ?? .app)
-        }
-        let stuck = parkable.count - parked.count
+        let closedWindows = parked(parkable.filter { closed.contains($0.windowID) })
+        let stuck = parkable.count - closedWindows.count
         if stuck > 0, notes.isEmpty {
             notes.append(stuck == 1 ? "1 window couldn’t be closed." : "\(stuck) windows couldn’t be closed.")
         }
-        guard !parked.isEmpty else { throw ParkError.nothingParkable(notes) }
+        guard !closedWindows.isEmpty else {
+            SpotStore.clearPending()
+            throw ParkError.nothingParkable(notes)
+        }
 
-        let spot = Spot(name: Self.name(for: parked), createdAt: Date(), windows: parked)
+        let spot = Spot(id: spotID, name: Self.name(for: closedWindows), createdAt: Date(), windows: closedWindows)
         pendingMeasurements[spot.id] = (roots, before)
         return ParkResult(spot: spot, notes: notes)
     }
@@ -235,7 +261,7 @@ final class Engine {
     }
 
     /// "Inbox (3) - you@example.com - Gmail" → "Inbox (3)"; page titles usually lead with what matters.
-    private static func shortTitle(_ title: String) -> String {
+    static func shortTitle(_ title: String) -> String {
         let separators = [" - ", " – ", " — ", " | ", " · "]
         var result = title
         for separator in separators {

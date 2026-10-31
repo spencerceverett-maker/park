@@ -20,7 +20,7 @@ enum FigmaAdapter {
         var activeTab: Tab? { tabs.first { $0.path == activeTabPath } }
     }
 
-    private struct Tab: Decodable {
+    struct Tab: Decodable {
         let path: String      // "/file/<key>"
         let title: String
         let params: String    // "?node-id=…&p=f&viewport=…&t=…"
@@ -68,7 +68,7 @@ enum FigmaAdapter {
 
     /// `figma://file/<key>/<slug>?<params>` opens a file as a new tab in the focused window and keeps the
     /// page, selection and viewport. Figma's per-session tokens are dropped.
-    private static func deepLink(_ tab: Tab) -> String {
+    static func deepLink(_ tab: Tab) -> String {
         let key = tab.path.split(separator: "/").last.map(String.init) ?? ""
         let slug = tab.title.replacingOccurrences(of: " ", with: "-")
             .addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "file"

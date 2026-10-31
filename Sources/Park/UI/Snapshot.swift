@@ -20,6 +20,7 @@ enum Snapshot {
             bundleIDs: ["com.google.Chrome", "com.figma.Desktop", "dev.warp.Warp-Stable"],
             appNames: ["Chrome", "Figma", "Warp"]
         )
+        if arguments.contains("--running") { model.preview?.runningCommands = ["claude", "npm run dev"] }
         model.memory = MemoryStats(used: 12_400_000_000, total: 17_179_869_184)
         if arguments.contains("--toast") { model.toast = Toast(message: "Deleted “Website refresh”", undo: {}) }
 

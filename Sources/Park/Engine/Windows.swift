@@ -24,22 +24,51 @@ import Carbon // AEDeterminePermissionToAutomateTarget, kAE* constants
 typealias CGSConnectionID = UInt32
 typealias CGSSpaceID = UInt64
 
-@_silgen_name("_AXUIElementGetWindow")
-private func _AXUIElementGetWindow(_ el: AXUIElement, _ wid: UnsafeMutablePointer<CGWindowID>) -> AXError
-@_silgen_name("CGSMainConnectionID")
-private func CGSMainConnectionID() -> CGSConnectionID
-@_silgen_name("CGSGetActiveSpace")
-private func CGSGetActiveSpace(_ cid: CGSConnectionID) -> CGSSpaceID
-/// mask 0x7 = all spaces (current | other | user). Returns [] for windows that are on no Space
-/// (ordered-out helper windows, windows that were just closed, offscreen 500x500 Electron stubs...).
-@_silgen_name("CGSCopySpacesForWindows")
-private func CGSCopySpacesForWindows(_ cid: CGSConnectionID, _ mask: Int32, _ wids: CFArray) -> Unmanaged<CFArray>?
-@_silgen_name("CGSCopyManagedDisplaySpaces")
-private func CGSCopyManagedDisplaySpaces(_ cid: CGSConnectionID) -> Unmanaged<CFArray>?
-/// true for windows that are ordered in on *some* Space (including other Spaces);
-/// false for minimized windows and for hidden/ordered-out windows (e.g. Electron "close to tray").
-@_silgen_name("SLSWindowIsOrderedIn")
-private func SLSWindowIsOrderedIn(_ cid: CGSConnectionID, _ wid: CGWindowID, _ out: UnsafeMutablePointer<Bool>) -> Int32
+/// Undocumented system calls, looked up at runtime rather than linked. If a future macOS drops one,
+/// Park keeps working in a conservative mode (see `Private.hasSpaces`) instead of failing to launch.
+enum Private {
+    private static let skyLight = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY)
+
+    private static func symbol<T>(_ name: String, as type: T.Type) -> T? {
+        guard let pointer = dlsym(skyLight ?? UnsafeMutableRawPointer(bitPattern: -2), name) ?? dlsym(UnsafeMutableRawPointer(bitPattern: -2), name)
+        else { return nil }
+        return unsafeBitCast(pointer, to: type)
+    }
+
+    typealias GetWindow = @convention(c) (AXUIElement, UnsafeMutablePointer<CGWindowID>) -> AXError
+    typealias MainConnection = @convention(c) () -> CGSConnectionID
+    typealias ActiveSpace = @convention(c) (CGSConnectionID) -> CGSSpaceID
+    typealias SpacesForWindows = @convention(c) (CGSConnectionID, Int32, CFArray) -> Unmanaged<CFArray>?
+    typealias ManagedDisplaySpaces = @convention(c) (CGSConnectionID) -> Unmanaged<CFArray>?
+    typealias IsOrderedIn = @convention(c) (CGSConnectionID, CGWindowID, UnsafeMutablePointer<Bool>) -> Int32
+
+    static let getWindow = symbol("_AXUIElementGetWindow", as: GetWindow.self)
+    static let mainConnection = symbol("CGSMainConnectionID", as: MainConnection.self)
+    static let activeSpace = symbol("CGSGetActiveSpace", as: ActiveSpace.self)
+    /// mask 0x7 = all spaces (current | other | user). Returns [] for windows that are on no Space
+    /// (ordered-out helper windows, windows that were just closed, offscreen 500x500 Electron stubs...).
+    static let spacesForWindows = symbol("CGSCopySpacesForWindows", as: SpacesForWindows.self)
+    static let managedDisplaySpaces = symbol("CGSCopyManagedDisplaySpaces", as: ManagedDisplaySpaces.self)
+    /// true for windows that are ordered in on *some* Space (including other Spaces);
+    /// false for minimized windows and for hidden/ordered-out windows (e.g. Electron "close to tray").
+    static let isOrderedIn = symbol("SLSWindowIsOrderedIn", as: IsOrderedIn.self)
+
+    /// Whether Park can tell which desktop each window is on. Without it, Park never quits apps.
+    static var hasSpaces: Bool { mainConnection != nil && activeSpace != nil && spacesForWindows != nil }
+}
+
+private func _AXUIElementGetWindow(_ el: AXUIElement, _ wid: UnsafeMutablePointer<CGWindowID>) -> AXError {
+    Private.getWindow?(el, wid) ?? .failure
+}
+private func CGSMainConnectionID() -> CGSConnectionID { Private.mainConnection?() ?? 0 }
+private func CGSGetActiveSpace(_ cid: CGSConnectionID) -> CGSSpaceID { Private.activeSpace?(cid) ?? 0 }
+private func CGSCopySpacesForWindows(_ cid: CGSConnectionID, _ mask: Int32, _ wids: CFArray) -> Unmanaged<CFArray>? {
+    Private.spacesForWindows?(cid, mask, wids)
+}
+private func CGSCopyManagedDisplaySpaces(_ cid: CGSConnectionID) -> Unmanaged<CFArray>? { Private.managedDisplaySpaces?(cid) }
+private func SLSWindowIsOrderedIn(_ cid: CGSConnectionID, _ wid: CGWindowID, _ out: UnsafeMutablePointer<Bool>) -> Int32 {
+    Private.isOrderedIn?(cid, wid, out) ?? -1
+}
 
 // MARK: - Permissions ----------------------------------------------------------------------
 
@@ -203,8 +232,10 @@ enum CurrentSpace {
                   let bd = w[kCGWindowBounds as String] as? NSDictionary,
                   let frame = CGRect(dictionaryRepresentation: bd),
                   frame.width >= minSide, frame.height >= minSide else { continue }
-            let sp = Set(Spaces.spaces(for: wid))
-            guard sp.count == 1, !sp.isDisjoint(with: current) else { continue } // sticky or other display
+            if Private.hasSpaces {
+                let sp = Set(Spaces.spaces(for: wid))
+                guard sp.count == 1, !sp.isDisjoint(with: current) else { continue } // sticky or other display
+            }
             onscreen.append((wid, pid, frame))
         }
 
@@ -232,7 +263,7 @@ enum CurrentSpace {
                sub != (kAXStandardWindowSubrole as String) { continue }
             result.append(make(w.wid, w.pid, w.frame, minimized: false))
         }
-        if includeMinimized && axTrusted {
+        if includeMinimized && axTrusted && Private.hasSpaces {
             for (wid, el) in axByWID where !seen.contains(wid) {
                 guard (AX.attr(el, kAXMinimizedAttribute) as Bool?) == true,
                       !Set(Spaces.spaces(for: wid)).isDisjoint(with: current),
@@ -270,6 +301,8 @@ enum QuitPolicy {
     /// means we close windows instead of quitting, which is safe. Windows with no Space at all
     /// (closed/stale/offscreen stubs) are ignored — verified those return [] from CGSCopySpacesForWindows.
     static func windowsElsewhere(pid: pid_t, current: Set<CGSSpaceID> = [Spaces.activeSpace]) -> [CGWindowID] {
+        // Without Space information, assume the app is in use elsewhere: closing beats wrongly quitting.
+        guard Private.hasSpaces else { return [kCGNullWindowID] }
         let info = (CGWindowListCopyWindowInfo([.optionAll, .excludeDesktopElements], kCGNullWindowID)
                     as? [[String: Any]]) ?? []
         return info.compactMap { w -> CGWindowID? in
