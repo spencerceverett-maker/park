@@ -23,7 +23,7 @@ const FIELD = {
 
 const VS = `#version 300 es
 precision highp float;
-in vec2 aPos;
+in vec3 aMote;   // x, y in CSS px; z: this mote's own fade
 uniform float uTime, uScale, uFade;
 uniform vec2 uResolution, uPointer;
 uniform float uPointerOn;
@@ -45,14 +45,14 @@ void main() {
   vBokeh = bokeh ? 1.0 : 0.0;
   vec2 corner = vec2(float(gl_VertexID & 1), float(gl_VertexID >> 1)) * 2.0 - 1.0;
   vLocal = corner * vExt;
-  vec2 pixel = (aPos + vLocal) * uScale;
+  vec2 pixel = (aMote.xy + vLocal) * uScale;
   gl_Position = vec4(pixel.x / uResolution.x * 2.0 - 1.0, 1.0 - pixel.y / uResolution.y * 2.0, 0.0, 1.0);
 
   float twinkle = 1.0 - uL[4] * 0.5 * (1.0 + sin(uTime * uL[5] * (0.7 + 0.6 * h4) * 6.2831853 + h2 * 40.0));
   float alpha = uL[3] * (1.0 - uL[8] * h7) * (bokeh ? 0.32 : 1.0);
   // Motes near the pointer brighten a little, as if stirred.
-  float near = uPointerOn * exp(-pow(length(aPos - uPointer) / 120.0, 2.0));
-  vBright = twinkle * alpha * (1.0 + near * 0.6) * uFade * (0.55 + 0.45 * h1);
+  float near = uPointerOn * exp(-pow(length(aMote.xy - uPointer) / 120.0, 2.0));
+  vBright = twinkle * alpha * (1.0 + near * 0.6) * uFade * aMote.z * (0.55 + 0.45 * h1);
 }`;
 
 const FS = `#version 300 es
@@ -102,6 +102,8 @@ function curl(x, y, out) {
   out[1] = (noise(x - e, y) - noise(x + e, y)) / (2 * e);
 }
 
+function smooth(a, b, x) { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+
 function compile(gl) {
   const p = gl.createProgram();
   for (const [type, src] of [[gl.VERTEX_SHADER, VS], [gl.FRAGMENT_SHADER, FS]]) {
@@ -118,9 +120,12 @@ function compile(gl) {
 
 /**
  * Fills `host` with a field of fireflies. With `still`, draws one frame and never moves (reduced motion).
+ * With `rise`, they come up from below the bottom edge and fade as they climb, instead of filling the box.
+ * `listen` is the element whose pointer they feel (the host, unless the host doesn't take pointer events).
  * Returns nothing; the field lives as long as the page, pausing whenever the host is off screen.
  */
-export function mountFireflies(host, { still = false } = {}) {
+export function mountFireflies(host, { still = false, rise = false, density = FIELD.density, look: lookOverrides = {}, listen = host } = {}) {
+  const L = { ...LOOK, ...lookOverrides };
   const canvas = document.createElement("canvas");
   canvas.className = "fireflies";
   canvas.setAttribute("aria-hidden", "true");
@@ -131,14 +136,15 @@ export function mountFireflies(host, { still = false } = {}) {
   host.append(canvas);
 
   const u = (name) => gl.getUniformLocation(prog, name);
-  const look = new Float32Array([LOOK.size, LOOK.sizeVariation, LOOK.softness, LOOK.opacity, LOOK.twinkle,
-    LOOK.twinkleSpeed, LOOK.depth, LOOK.colorMix, LOOK.opacityVariation, LOOK.whiteCore, LOOK.glow]);
+  const look = new Float32Array([L.size, L.sizeVariation, L.softness, L.opacity, L.twinkle,
+    L.twinkleSpeed, L.depth, L.colorMix, L.opacityVariation, L.whiteCore, L.glow]);
   const buffer = gl.createBuffer();
-  const loc = gl.getAttribLocation(prog, "aPos");
+  const loc = gl.getAttribLocation(prog, "aMote");
 
   let W = 0, H = 0, scale = 1, count = 0;
   let pos = new Float32Array(0), vel = new Float32Array(0), depth = new Float32Array(0);
-  const draw = new Float32Array(FIELD.maxCount * 2);
+  const draw = new Float32Array(FIELD.maxCount * 3);
+  let rate = new Float32Array(0);   // rise: px/s upward, per mote
 
   // Keep motes where they are across resizes; only add or drop the difference.
   function resize() {
@@ -148,8 +154,8 @@ export function mountFireflies(host, { still = false } = {}) {
     W = box.width; H = box.height;
     canvas.width = Math.round(W * scale);
     canvas.height = Math.round(H * scale);
-    const next = Math.min(FIELD.maxCount, Math.round(W * H * FIELD.density));
-    const p = new Float32Array(next * 2), v = new Float32Array(next * 2), d = new Float32Array(next);
+    const next = Math.min(FIELD.maxCount, Math.round(W * H * density));
+    const p = new Float32Array(next * 2), v = new Float32Array(next * 2), d = new Float32Array(next), r = new Float32Array(next);
     for (let i = 0; i < next; i++) {
       if (i < count) {
         p[i * 2] = pos[i * 2] * (W / oldW); p[i * 2 + 1] = pos[i * 2 + 1] * (H / oldH);
@@ -157,20 +163,21 @@ export function mountFireflies(host, { still = false } = {}) {
       } else {
         p[i * 2] = Math.random() * W; p[i * 2 + 1] = Math.random() * H;
       }
+      r[i] = 10 + 22 * hash(i, 5.1);
       // Matches the shader's bokeh pick, so the near motes are the ones that lean with the pointer.
-      d[i] = hash(i, 6.2) < LOOK.depth ? 1 : 0.35 + 0.3 * hash(i, 9.4);
+      d[i] = hash(i, 6.2) < L.depth ? 1 : 0.35 + 0.3 * hash(i, 9.4);
     }
-    pos = p; vel = v; depth = d; count = next;
+    pos = p; vel = v; depth = d; rate = r; count = next;
   }
 
   let pointerX = -1e4, pointerY = -1e4, pointerOn = 0, pointerTarget = 0;
   let leanX = 0, leanY = 0;
-  host.addEventListener("pointermove", (event) => {
+  listen.addEventListener("pointermove", (event) => {
     const box = host.getBoundingClientRect();
     pointerX = event.clientX - box.left; pointerY = event.clientY - box.top;
     pointerTarget = 1;
   }, { passive: true });
-  host.addEventListener("pointerleave", () => { pointerTarget = 0; });
+  listen.addEventListener("pointerleave", () => { pointerTarget = 0; });
 
   const flow = [0, 0];
   function step(dt, t) {
@@ -198,6 +205,13 @@ export function mountFireflies(host, { still = false } = {}) {
       vel[ix] = vx; vel[iy] = vy;
       x += (flow[0] * FIELD.drift * depth[i] * 2 + vx) * dt;
       y += (flow[1] * FIELD.drift * depth[i] * 2 + vy) * dt;
+      if (rise) {
+        // Up from below the edge, swaying on the current; once faded near the top, back in below.
+        y -= rate[i] * (0.5 + depth[i]) * dt;
+        if (y < 0) { y = H + 10 + Math.random() * 40; x = Math.random() * W; vel[ix] = vel[iy] = 0; }
+        pos[ix] = x; pos[iy] = y;
+        continue;
+      }
       // Wrap around the edges with a margin, so nothing pops in view.
       const m = 30;
       if (x < -m) x += W + 2 * m; else if (x > W + m) x -= W + 2 * m;
@@ -210,8 +224,11 @@ export function mountFireflies(host, { still = false } = {}) {
     for (let i = 0; i < count; i++) {
       // Near motes lean with the pointer: a hint of depth.
       const lean = depth[i] === 1 ? 1 : 0;
-      draw[i * 2] = pos[i * 2] + leanX * lean;
-      draw[i * 2 + 1] = pos[i * 2 + 1] + leanY * lean;
+      const y = pos[i * 2 + 1];
+      draw[i * 3] = pos[i * 2] + leanX * lean;
+      draw[i * 3 + 1] = y + leanY * lean;
+      // Rising motes are brightest just above the edge and gone by the top.
+      draw[i * 3 + 2] = rise ? Math.max(0, Math.min(1, (H - y) / 24)) * (1 - smooth(0.25, 1, 1 - y / H)) : 1;
     }
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.clearColor(0, 0, 0, 0);
@@ -220,9 +237,9 @@ export function mountFireflies(host, { still = false } = {}) {
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(prog);
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, draw.subarray(0, count * 2), gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, draw.subarray(0, count * 3), gl.DYNAMIC_DRAW);
     gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(loc, 3, gl.FLOAT, false, 0, 0);
     gl.vertexAttribDivisor(loc, 1);
     gl.uniform1f(u("uTime"), t);
     gl.uniform1f(u("uScale"), scale);

@@ -951,7 +951,12 @@ function wireFireflies() {
   const hero = $(".hero");
   if (!hero) return;
   // With reduced motion they stay: one still frame of texture, no movement.
-  import("./fireflies.js").then(({ mountFireflies }) => mountFireflies(hero, { still: reducedMotion.matches })).catch(() => {});
+  const footerSky = $("[data-footer-sky]");
+  import("./fireflies.js").then(({ mountFireflies }) => {
+    mountFireflies(hero, { still: reducedMotion.matches });
+    // Blue sparkles rising from below the page's bottom edge, under the footer.
+    if (footerSky) mountFireflies(footerSky, { still: reducedMotion.matches, rise: true, density: 260 / 1e6, listen: $(".footer"), look: { colorMix: 0, depth: 0.04 } });
+  }).catch(() => {});
 }
 
 /* ---------- Buttons lean slightly toward the pointer ---------- */
