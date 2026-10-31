@@ -456,22 +456,16 @@ function wireDemo() {
     fitTryChip();
   }
 
-  // The hint points at the panel's button, so it goes with the panel, and steps aside rather than
-  // hang off the bottom of the screen when the Mac is short.
+  // The hint points at the panel's button, so it goes with the panel, and never hangs off the bottom
+  // of the screen when the Mac is short.
   function fitTryChip() {
     if (!tryChip) return;
     const screenBox = display.getBoundingClientRect();
     const top = panel.getBoundingClientRect().bottom + 16;
     const fits = top + tryChip.offsetHeight <= screenBox.bottom - 12;
-    // No room below: sit to the panel's left, level with the button it points at.
-    tryChip.classList.toggle("is-beside", !fits);
-    if (!fits) {
-      const host = tryChip.offsetParent.getBoundingClientRect();
-      const button = parkButton.getBoundingClientRect();
-      tryChip.style.setProperty("--beside-top", `${button.top + button.height / 2 - host.top - tryChip.offsetHeight / 2}px`);
-      tryChip.style.setProperty("--beside-right", `${host.right - panel.getBoundingClientRect().left + 12}px`);
-    }
-    tryChip.classList.toggle("is-off", panel.classList.contains("is-hidden"));
+    // No room below: drop the words, and let the button itself breathe once in a while instead.
+    tryChip.classList.toggle("is-off", panel.classList.contains("is-hidden") || !fits);
+    parkButton.classList.toggle("is-hinted", !fits && !tryChip.classList.contains("is-done"));
   }
   new ResizeObserver(fitTryChip).observe(display);
 
@@ -490,6 +484,7 @@ function wireDemo() {
     clearTimers();
     if (showingDesktop) toggleShowDesktop(false, { instant: true });
     tryChip?.classList.add("is-done");
+    parkButton.classList.remove("is-hinted");
     const hadFocus = document.activeElement === parkButton;
 
     rowWrap.classList.add("is-open");

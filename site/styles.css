@@ -478,9 +478,13 @@ button { font: inherit; color: inherit; }
 }
 .try-chip strong { font-weight: 600; }
 .try-chip.is-done { opacity: 0; transform: translateX(50%) translateY(-6px); pointer-events: none; }
-.try-chip.is-beside { top: var(--beside-top); right: var(--beside-right); transform: none; }
-.try-chip.is-beside.is-done { transform: translateY(-6px); }
 .try-chip.is-off { opacity: 0; visibility: hidden; transition: opacity 150ms ease, visibility 0s linear 150ms; }
+.p-button.is-hinted { animation: hint 2.8s ease-out 1.2s infinite; }
+@keyframes hint {
+  0%   { box-shadow: 0 0 0 0 rgba(94, 224, 138, 0.55); }
+  60%  { box-shadow: 0 0 0 9px rgba(94, 224, 138, 0); }
+  100% { box-shadow: 0 0 0 9px rgba(94, 224, 138, 0); }
+}
 .try-dot { width: 7px; height: 7px; border-radius: 50%; background: #5ee08a; box-shadow: 0 0 0 3px rgba(94, 224, 138, 0.25); }
 
 .panel {
@@ -787,7 +791,7 @@ kbd {
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .light i { animation: none; }
+  .light i, .p-button.is-hinted { animation: none; }
   .js .split .word, .js .fade { opacity: 1; transform: none; filter: none; transition: none; }
   .win, .win.is-parked, .win.is-closed, .win.is-minimized, .win.is-opening, .win.is-unminimizing { transition: opacity 200ms ease, visibility 0s linear 200ms; }
   .win.is-parked, .win.is-closed, .win.is-minimized { transform: none; }
@@ -796,7 +800,7 @@ kbd {
 }
 
 /* ?reduced in the URL forces the reduced-motion experience, for testing. */
-.reduce-motion .light i { animation: none; }
+.reduce-motion .light i, .reduce-motion .p-button.is-hinted { animation: none; }
 .reduce-motion .win, .reduce-motion .win.is-parked, .reduce-motion .win.is-closed, .reduce-motion .win.is-minimized, .reduce-motion .win.is-opening, .reduce-motion .win.is-unminimizing { transition: opacity 200ms ease, visibility 0s linear 200ms !important; }
 .reduce-motion .win.is-parked, .reduce-motion .win.is-closed, .reduce-motion .win.is-minimized { transform: none !important; }
 .reduce-motion .split .word, .reduce-motion .fade { opacity: 1 !important; transform: none !important; filter: none !important; transition: none !important; }
