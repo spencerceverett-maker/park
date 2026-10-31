@@ -972,12 +972,7 @@ function wireFireflies() {
   const hero = $(".hero");
   if (!hero) return;
   // With reduced motion they stay: one still frame of texture, no movement.
-  const sparkles = $("[data-sparkles]");
-  import("./fireflies.js").then(({ mountFireflies }) => {
-    mountFireflies(hero, { still: reducedMotion.matches });
-    // Blue sparkles rising from below the "Park is free" section's bottom edge.
-    if (sparkles) mountFireflies(sparkles, { still: reducedMotion.matches, rise: true, density: 170 / 1e6, listen: $(".support"), reach: 200, push: 1800, look: { colorMix: 0, depth: 0 } });
-  }).catch(() => {});
+  import("./fireflies.js").then(({ mountFireflies }) => mountFireflies(hero, { still: reducedMotion.matches })).catch(() => {});
 }
 
 /* ---------- Buttons lean slightly toward the pointer ---------- */

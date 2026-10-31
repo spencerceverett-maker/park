@@ -683,9 +683,7 @@ kbd {
 .dock-link { padding: 0 10px; font-size: 14px; }
 @media (max-width: 860px) { .dock-text span { display: none; } .dock { justify-content: space-between; } }
 
-.support { position: relative; isolation: isolate; overflow: hidden; overflow: clip; background: var(--surface); text-align: center; }
-/* Sparkles rise from below the section's bottom edge and thin out as they climb. */
-.sparkle-sky { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+.support { background: var(--surface); text-align: center; }
 .support-inner { display: flex; flex-direction: column; align-items: center; }
 .support-icon { width: 88px; height: 88px; margin-bottom: 28px; filter: drop-shadow(0 14px 24px rgba(var(--shadow), 0.2)); }
 .support .section-lede { margin-left: auto; margin-right: auto; }
