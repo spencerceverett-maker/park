@@ -284,7 +284,16 @@ button { font: inherit; color: inherit; }
 .mb-item:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.85); outline-offset: -2px; }
 .mb-item[aria-expanded="true"] { background: rgba(255, 255, 255, 0.26); }
 .mb-apple { padding: 0 9px 1px; }
-.mac-bar-right { display: flex; align-items: center; gap: 14px; margin-left: auto; font-variant-numeric: tabular-nums; }
+.mac-bar-right { display: flex; align-items: center; gap: 14px; margin-left: auto; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+/* A real menu bar never wraps: as the little screen narrows, items drop out the way macOS does. */
+.mac-bar, .mac-bar * { white-space: nowrap; }
+.mac-menus { min-width: 0; }
+@container (max-width: 720px) { .mac-mem { display: none; } }
+@container (max-width: 640px) { .mb-item[data-menu="help"] { display: none; } }
+@container (max-width: 580px) { .mb-item[data-menu="window"], .mb-item[data-menu="go"] { display: none; } }
+@container (max-width: 470px) { [data-clock] { display: none; } }
+@container (max-width: 360px) { .mb-item[data-menu="view"] { display: none; } }
+@container (max-width: 310px) { .mb-item[data-menu="edit"] { display: none; } }
 .status-icon {
   display: grid; place-items: center; width: 30px; height: 22px; padding: 0;
   border: 0; border-radius: 5px; color: inherit; background: transparent; cursor: pointer;
