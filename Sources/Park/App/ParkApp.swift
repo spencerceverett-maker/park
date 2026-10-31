@@ -71,7 +71,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let preview = await model.engine.preview()
             guard preview.windowCount > 0 else { NSSound.beep(); return }
             await model.park()
-            Feedback.flash(statusItem.button)
+            // Anything worth reading (a window left open, an error) needs the panel; success is a quick pulse.
+            if model.errorMessage != nil { panel.open() } else { Feedback.flash(statusItem.button) }
         }
     }
 }

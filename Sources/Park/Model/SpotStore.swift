@@ -35,6 +35,13 @@ final class SpotStore {
         save()
     }
 
+    /// Changes only the memory figure, so a late measurement can't undo a rename or a partial restore.
+    func setFreedBytes(_ id: Spot.ID, _ bytes: UInt64) {
+        guard let index = spots.firstIndex(where: { $0.id == id }) else { return }
+        spots[index].freedBytes = bytes
+        save()
+    }
+
     func update(_ spot: Spot) {
         guard let index = spots.firstIndex(where: { $0.id == spot.id }) else { return }
         spots[index] = spot

@@ -33,6 +33,12 @@ struct PanelView: View {
         .focusEffectDisabled()
         .focused($focused)
         .onAppear { focused = true }
+        .onChange(of: model.openCount) {
+            // The view is reused between opens: start fresh so ↩ parks instead of restoring a stale selection.
+            selection = nil
+            renamingID = nil
+            focused = true
+        }
         .onKeyPress(.downArrow) { moveSelection(by: 1) }
         .onKeyPress(.upArrow) { moveSelection(by: -1) }
         .onKeyPress(.return) { activate() }
@@ -299,7 +305,7 @@ private struct ToastView: View {
                 .font(.system(size: 11.5, weight: .medium))
                 .lineLimit(1)
             if let undo = toast.undo {
-                Button("Undo") {
+                Button(toast.undoTitle) {
                     withAnimation(Theme.spring) {
                         undo()
                         model.toast = nil

@@ -27,8 +27,14 @@ struct SpotList: View {
             if spots.isEmpty {
                 EmptyParked()
             } else if spots.count > Theme.maxVisibleRows {
-                ScrollView {
-                    rows(spots)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        rows(spots)
+                    }
+                    .onChange(of: selection) { _, id in
+                        guard let id else { return }
+                        withAnimation(Theme.quick) { proxy.scrollTo(id) }
+                    }
                 }
                 .scrollIndicators(.never)
                 .frame(height: CGFloat(Theme.maxVisibleRows) * Theme.rowHeight + Theme.rowHeight / 2)
@@ -50,6 +56,7 @@ struct SpotList: View {
                         set: { renamingID = $0 ? spot.id : nil }
                     )
                 )
+                .id(spot.id)
                 .transition(.asymmetric(
                     insertion: .move(edge: .top).combined(with: .opacity),
                     removal: .opacity.combined(with: .scale(scale: 0.98, anchor: .top))
@@ -156,7 +163,10 @@ struct SpotRow: View {
         .help(helpText)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
-        .accessibilityAction(named: "Restore") { Task { await model.restore(spot) } }
+        .accessibilityHint("Reopens these windows on this desktop")
+        .accessibilityAction { Task { await model.restore(spot) } }
+        .accessibilityAction(named: "Rename", startRename)
+        .accessibilityAction(named: "Delete") { model.delete(spot) }
     }
 
     private var background: Color {

@@ -37,6 +37,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     private let model: AppModel
     private weak var statusButton: NSStatusBarButton?
     private var outsideClickMonitor: Any?
+    /// Guards the close animation's completion against a reopen that happened mid-animation.
+    private var generation = 0
 
     var isOpen: Bool { panel.isVisible }
 
@@ -89,6 +91,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     func open() {
+        generation += 1
+        model.openCount += 1
         model.refresh()
         position()
         panel.alphaValue = 0
@@ -111,12 +115,16 @@ final class PanelController: NSObject, NSWindowDelegate {
             outsideClickMonitor = nil
         }
         statusButton?.highlight(false)
+        let closing = generation
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.1
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panel.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
-            self?.panel.orderOut(nil)
+            MainActor.assumeIsolated {
+                guard let self, self.generation == closing else { return }
+                self.panel.orderOut(nil)
+            }
         })
     }
 

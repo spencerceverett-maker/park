@@ -18,6 +18,7 @@ struct DesktopPreview: Equatable {
 struct Toast: Identifiable, Equatable {
     let id = UUID()
     var message: String
+    var undoTitle = "Undo"
     var undo: (() -> Void)?
 
     static func == (lhs: Toast, rhs: Toast) -> Bool { lhs.id == rhs.id }
@@ -59,6 +60,9 @@ final class AppModel {
 
     private var previewTask: Task<Void, Never>?
 
+    /// Bumped each time the panel opens, so views can reset transient state like keyboard selection.
+    var openCount = 0
+
     /// Refresh everything the panel shows. Called each time the panel opens.
     @MainActor
     func refresh() {
@@ -90,7 +94,7 @@ final class AppModel {
         do {
             let result = try await engine.parkCurrentDesktop(quitApps: quitApps)
             let spot = result.spot
-            Log.write("parked \(spot.windows.count) windows as “\(spot.name)”; notes: \(result.notes)")
+            Log.write("parked \(spot.windows.count) windows (\(Set(spot.windows.map(\.appName)).sorted().joined(separator: ", "))); \(result.notes.count) notes")
             withAnimation(Theme.spring) {
                 store.insert(spot)
                 justParkedID = spot.id
@@ -105,12 +109,7 @@ final class AppModel {
             // Memory is released gradually as processes exit; measure once things settle.
             Task { @MainActor in
                 if let freed = await engine.measureFreedMemory(for: spot) {
-                    var updated = spot
-                    updated.freedBytes = freed
-                    if let current = store.spots.first(where: { $0.id == spot.id }) {
-                        updated.name = current.name
-                    }
-                    store.update(updated)
+                    store.setFreedBytes(spot.id, freed)
                 }
                 memory = MemoryStats.current()
                 try? await Task.sleep(for: .seconds(1.6))
@@ -130,9 +129,14 @@ final class AppModel {
         // Get the panel out of the way so restored windows come forward cleanly.
         dismissPanel()
         let failures = await engine.restore(spot)
-        Log.write("restored “\(spot.name)”; failed: \(failures.map(\.appName))")
+        Log.write("restored \(spot.windows.count - failures.count) of \(spot.windows.count) windows; failed: \(failures.map(\.appName))")
         if failures.isEmpty {
+            guard let index = store.spots.firstIndex(where: { $0.id == spot.id }) else { return }
             store.remove(spot.id)
+            // Keep a way back for a while in case something didn't come back the way it should have.
+            showToast("Restored “\(spot.name)”", undoTitle: "Put back", duration: .seconds(600)) { [weak self] in
+                self?.store.restore(spot, at: index)
+            }
         } else if failures.count == spot.windows.count {
             errorMessage = "Couldn’t reopen “\(spot.name)”. It’s still here."
         } else {
@@ -152,11 +156,11 @@ final class AppModel {
         }
     }
 
-    func showToast(_ message: String, undo: (() -> Void)? = nil) {
+    func showToast(_ message: String, undoTitle: String = "Undo", duration: Duration = .seconds(5), undo: (() -> Void)? = nil) {
         toastTask?.cancel()
-        toast = Toast(message: message, undo: undo)
+        toast = Toast(message: message, undoTitle: undoTitle, undo: undo)
         toastTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(5))
+            try? await Task.sleep(for: duration)
             guard !Task.isCancelled else { return }
             self?.toast = nil
         }

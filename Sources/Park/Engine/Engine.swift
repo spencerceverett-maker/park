@@ -13,6 +13,12 @@ final class Engine {
         "com.apple.MobileSMS", "com.apple.mail", "com.apple.iCal", WarpAdapter.bundleID,
     ]
 
+    init() {
+        // Accessibility timeouts are set per app (see AX.windows). Don't set one on the system-wide
+        // element: doing so makes _AXUIElementGetWindow fail for every window (verified on macOS 26).
+        queue.async { WarpAdapter.removeLeftoverLaunchConfigs() }
+    }
+
     struct ParkResult {
         var spot: Spot
         /// Plain-language notes about windows that were left open, e.g. waiting on a permission.
@@ -100,18 +106,25 @@ final class Engine {
                 let captured = FigmaAdapter.capture(appWindows)
                 for window in appWindows {
                     switch captured[window.windowID] {
-                    case .app?: break   // only the file browser: parks as the app itself
-                    case let content?: contents[window.windowID] = content
+                    case .content(.app)?: break   // only the file browser: parks as the app itself
+                    case .content(let content)?: contents[window.windowID] = content
+                    case .keepOpen(let reason)?:
+                        leaveOpen.insert(window.windowID)
+                        if !notes.contains(reason) { notes.append(reason) }
                     case nil:
                         leaveOpen.insert(window.windowID)
-                        notes.append("A Figma window stayed open because its tabs couldn’t be read. Try again in a few seconds.")
+                        notes.append("A Figma window stayed open because Park couldn’t tell which file it shows. Try again in a few seconds.")
                     }
                 }
 
             case WarpAdapter.bundleID:
                 let captured = WarpAdapter.capture(appWindows)
                 contents.merge(captured) { $1 }
-                for window in appWindows where captured[window.windowID] == nil { leaveOpen.insert(window.windowID) }
+                let unmatched = appWindows.filter { captured[$0.windowID] == nil }
+                if !unmatched.isEmpty {
+                    unmatched.forEach { leaveOpen.insert($0.windowID) }
+                    notes.append("A Warp window stayed open because Park couldn’t read its tabs.")
+                }
 
             case Finder.bundleID:
                 do {
@@ -137,6 +150,40 @@ final class Engine {
             }
         }
 
+        // Decide which apps can be quit outright: every window of theirs is parkable, nothing of theirs
+        // lives on another desktop, and they have no other windows here that Park didn't list.
+        var quitPIDs = Set<pid_t>()
+        if quitApps {
+            for (pid, appWindows) in Dictionary(grouping: windows, by: \.pid) {
+                guard appWindows.allSatisfy({ !leaveOpen.contains($0.windowID) }),
+                      let app = NSRunningApplication(processIdentifier: pid), let id = app.bundleIdentifier,
+                      !Self.neverQuit.contains(id), !Self.unsupportedTabApps.contains(id),
+                      QuitPolicy.windowsElsewhere(pid: pid).isEmpty,
+                      Self.unlistedWindows(pid: pid, known: Set(appWindows.map(\.windowID))).isEmpty else { continue }
+                quitPIDs.insert(pid)
+            }
+        }
+
+        // A window with nothing app-specific to restore can only be closed safely if its app is quit
+        // (and restores itself on relaunch), or if reopening the app brings back the same thing.
+        var keptApps: [String] = []
+        for window in windows where contents[window.windowID] == nil && !leaveOpen.contains(window.windowID) {
+            let id = window.bundleID!
+            if Self.unsupportedTabApps.contains(id) {
+                leaveOpen.insert(window.windowID)
+                if !keptApps.contains(window.appName) {
+                    keptApps.append(window.appName)
+                    notes.append("\(window.appName) stayed open. Park can’t save its tabs yet.")
+                }
+            } else if !quitPIDs.contains(window.pid) && !Self.reopensLosslessly.contains(id) {
+                leaveOpen.insert(window.windowID)
+                if !keptApps.contains(window.appName) {
+                    keptApps.append(window.appName)
+                    notes.append("\(window.appName) stayed open because it’s also in use elsewhere, and Park can’t reopen that exact window.")
+                }
+            }
+        }
+
         let parkable = windows.filter { !leaveOpen.contains($0.windowID) }
         guard !parkable.isEmpty else { throw ParkError.nothingParkable(notes) }
 
@@ -151,18 +198,7 @@ final class Engine {
         // Switching desktops mid-park would close the wrong windows.
         guard Spaces.activeSpace == space else { throw ParkError.desktopChanged }
 
-        // Decide which apps can be quit outright: nothing of theirs lives on another desktop.
         let apps = Dictionary(grouping: parkable) { $0.pid }
-        var quitPIDs = Set<pid_t>()
-        if quitApps {
-            for (pid, appWindows) in apps {
-                guard let app = NSRunningApplication(processIdentifier: pid), let id = app.bundleIdentifier,
-                      !Self.neverQuit.contains(id),
-                      appWindows.count == windows.filter({ $0.pid == pid }).count,
-                      QuitPolicy.windowsElsewhere(pid: pid).isEmpty else { continue }
-                quitPIDs.insert(pid)
-            }
-        }
         let roots = Set(apps.keys)
         let before = Processes.footprint(ofTreesRootedAt: roots)
 
@@ -180,32 +216,48 @@ final class Engine {
         // Close. Apps that will be quit and have nothing app-specific to restore are just quit,
         // so their own state restoration brings their windows back on relaunch.
         var closed = Set<CGWindowID>()
+        var quitWithoutClosing = Set<pid_t>()
+        for pid in quitPIDs where apps[pid]?.allSatisfy({ contents[$0.windowID] == nil }) == true {
+            quitWithoutClosing.insert(pid)
+        }
         for window in parkable {
-            let quitWithoutClosing = quitPIDs.contains(window.pid) && apps[window.pid]!.allSatisfy { contents[$0.windowID] == nil }
-            if quitWithoutClosing { closed.insert(window.windowID); continue }
+            if quitWithoutClosing.contains(window.pid) { closed.insert(window.windowID); continue }
             if let id = browserIDs[window.windowID], let bundleID = window.bundleID {
-                if (try? Chrome.close(chromeWindowID: id, bundleID: bundleID)) != nil { closed.insert(window.windowID) }
+                // A "Leave site?" prompt keeps a window open even when the close command succeeds.
+                if (try? Chrome.close(chromeWindowID: id, bundleID: bundleID)) != nil,
+                   Self.waitUntilGone(window.windowID, pid: window.pid) {
+                    closed.insert(window.windowID)
+                }
             } else if let id = finderIDs[window.windowID] {
-                if (try? Finder.close(finderWindowID: id)) != nil { closed.insert(window.windowID) }
+                if (try? Finder.close(finderWindowID: id)) != nil, Self.waitUntilGone(window.windowID, pid: window.pid) {
+                    closed.insert(window.windowID)
+                }
             } else if AXClose.close(window) == .closed {
                 closed.insert(window.windowID)
             }
         }
 
+        var terminated = Set<pid_t>()
         for pid in quitPIDs {
-            // Only quit when every window of the app was handled.
-            guard apps[pid]!.allSatisfy({ closed.contains($0.windowID) }),
-                  let app = NSRunningApplication(processIdentifier: pid) else { continue }
-            app.terminate()
-        }
-        waitForTermination(of: quitPIDs, timeout: 6)
-        for pid in quitPIDs {
-            guard let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated else { continue }
-            // Still running: probably asking about unsaved changes. Its windows count as open.
-            for window in apps[pid] ?? [] where AXClose.windowExists(window.windowID, pid: pid) {
-                closed.remove(window.windowID)
+            let known = Set(apps[pid]!.map(\.windowID))
+            // Only quit when every window was handled, and nothing new appeared on this desktop meanwhile.
+            guard known.isSubset(of: closed), Self.unlistedWindows(pid: pid, known: known).isEmpty,
+                  let app = NSRunningApplication(processIdentifier: pid) else {
+                if quitWithoutClosing.contains(pid) { closed.subtract(known) }
+                continue
             }
-            notes.append("\(app.localizedName ?? "An app") is asking about unsaved changes.")
+            app.terminate()
+            terminated.insert(pid)
+        }
+        waitForTermination(of: terminated, timeout: 8)
+        for pid in terminated {
+            guard let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated else { continue }
+            // Still running. If its windows are still here it's probably asking about unsaved changes;
+            // if they're gone it's just slow to quit, and its windows are parked.
+            let stillOpen = (apps[pid] ?? []).filter { AXClose.windowExists($0.windowID, pid: pid) }
+            guard !stillOpen.isEmpty else { continue }
+            stillOpen.forEach { closed.remove($0.windowID) }
+            notes.append("\(app.localizedName ?? "An app") is asking about unsaved changes, so it stayed open.")
         }
 
         let closedWindows = parked(parkable.filter { closed.contains($0.windowID) })
@@ -221,6 +273,33 @@ final class Engine {
         let spot = Spot(id: spotID, name: Self.name(for: closedWindows), createdAt: Date(), windows: closedWindows)
         pendingMeasurements[spot.id] = (roots, before)
         return ParkResult(spot: spot, notes: notes)
+    }
+
+    /// Apps where closing a window and reopening the app later brings back the same view.
+    static let reopensLosslessly: Set<String> = [
+        "com.tinyspeck.slackmacgap", "com.apple.MobileSMS", "com.apple.mail", "com.spotify.client", "com.apple.Music",
+        "com.apple.iCal", "notion.id", "com.linear", "com.hnc.Discord", "com.anthropic.claudefordesktop",
+        "com.openai.chat", "com.granola.app", "com.apple.Notes", "com.apple.reminders", "com.apple.systempreferences",
+    ]
+
+    /// Apps with tabs or sessions Park can't capture yet. Their windows are never closed.
+    static let unsupportedTabApps: Set<String> = [
+        "com.apple.Safari", "org.mozilla.firefox", "com.apple.Terminal", "com.googlecode.iterm2",
+    ]
+
+    /// Windows of an app on this desktop that Park didn't list (dialogs, inactive native tabs, tiny windows,
+    /// windows opened while parking). Quitting the app would close them without saving anything.
+    static func unlistedWindows(pid: pid_t, known: Set<CGWindowID>) -> Set<CGWindowID> {
+        Set(AX.windows(pid: pid).map(\.1)).subtracting(known)
+    }
+
+    static func waitUntilGone(_ windowID: CGWindowID, pid: pid_t, timeout: TimeInterval = 2) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if !AXClose.windowExists(windowID, pid: pid) { return true }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        return !AXClose.windowExists(windowID, pid: pid)
     }
 
     private func waitForTermination(of pids: Set<pid_t>, timeout: TimeInterval) {
@@ -305,26 +384,27 @@ final class Engine {
                 }
                 let snapshot = ChromeWindowSnapshot(
                     chromeWindowID: 0, mode: incognito ? "incognito" : "normal",
-                    bounds: window.frame ?? CGRect(x: 80, y: 80, width: 1280, height: 860),
-                    activeTabIndex: activeIndex + 1, tabs: tabs.map { ChromeTab(url: $0.url, title: $0.title) },
+                    bounds: Screens.fit(window.frame ?? CGRect(x: 80, y: 80, width: 1280, height: 860)),
+                    activeTabIndex: activeIndex + 1, tabs: tabs.map { ChromeTab(url: Self.safeTabURL($0.url), title: $0.title) },
                     givenName: "", minimized: false, title: "")
                 ok = (try? Chrome.restore(snapshot, bundleID: window.bundleID)) != nil
 
             case .figma(let files, let activeIndex):
-                ok = FigmaAdapter.restore(files: files, activeIndex: activeIndex, frame: window.frame)
+                ok = FigmaAdapter.restore(files: files, activeIndex: activeIndex, frame: window.frame.map(Screens.fit))
 
             case .terminal(let tabs, let activeIndex):
                 ok = WarpAdapter.restore(tabs: tabs, activeIndex: activeIndex)
 
             case .folder(let path):
                 guard FileManager.default.fileExists(atPath: path) else { ok = false; break }
-                let frame = window.frame ?? CGRect(x: 120, y: 120, width: 900, height: 560)
+                let frame = Screens.fit(window.frame ?? CGRect(x: 120, y: 120, width: 900, height: 560))
                 let snapshot = FinderWindowSnapshot(finderWindowID: 0, path: path, bounds: frame,
                                                     currentView: "icon view", collapsed: false, name: "")
-                if (try? Finder.restore(snapshot)) == nil {
-                    Finder.restoreWithoutAutomation(path: path, frame: frame)
+                if (try? Finder.restore(snapshot)) != nil {
+                    ok = true
+                } else {
+                    ok = Finder.restoreWithoutAutomation(path: path, frame: frame)
                 }
-                ok = true
 
             case .document(let path):
                 ok = openDocument(path, bundleID: window.bundleID, frame: window.frame)
@@ -347,6 +427,13 @@ final class Engine {
         return failures.reversed()
     }
 
+    /// Tab URLs come back from disk; only reopen ordinary pages, never script URLs.
+    static func safeTabURL(_ string: String) -> String {
+        let allowed: Set<String> = ["http", "https", "file", "chrome", "about", "chrome-extension", "edge", "brave", "vivaldi"]
+        guard let scheme = URL(string: string)?.scheme?.lowercased(), allowed.contains(scheme) else { return "about:blank" }
+        return string
+    }
+
     private func isRunning(_ bundleID: String) -> Bool {
         NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).contains { !$0.isTerminated }
     }
@@ -363,7 +450,11 @@ final class Engine {
         }
         _ = done.wait(timeout: .now() + 15)
         guard let app = opened else { return false }
-        if let frame { place(pid: app.processIdentifier, frame: frame) { AX.attr($0, kAXDocumentAttribute) == url.absoluteString } }
+        let showsDocument: (AXUIElement) -> Bool = { AX.attr($0, kAXDocumentAttribute) == url.absoluteString }
+        if let frame {
+            place(pid: app.processIdentifier, frame: frame, where: showsDocument)
+        }
+        // Apps that don't report their document can't be checked; the open itself succeeded.
         return true
     }
 
@@ -412,7 +503,7 @@ final class Engine {
         let deadline = Date().addingTimeInterval(4)
         while Date() < deadline {
             if let (element, _) = AX.windows(pid: pid).first(where: { predicate($0.0) }) {
-                AX.setFrame(element, frame)
+                AX.setFrame(element, Screens.fit(frame))
                 return
             }
             Thread.sleep(forTimeInterval: 0.2)
@@ -440,6 +531,31 @@ extension NSWorkspace.OpenConfiguration {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = false
         return configuration
+    }
+}
+
+/// Display geometry in the top-left coordinates AX, CG and AppleScript use. Safe off the main thread.
+enum Screens {
+    static var frames: [CGRect] {
+        var count: UInt32 = 0
+        CGGetActiveDisplayList(0, nil, &count)
+        var displays = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        CGGetActiveDisplayList(count, &displays, &count)
+        return displays.prefix(Int(count)).map { CGDisplayBounds($0) }
+    }
+
+    /// Keeps a saved frame if it's mostly on a connected display; otherwise moves it onto the main display,
+    /// shrinking it to fit. Parking on an external monitor and restoring on a laptop would otherwise
+    /// put windows out of sight.
+    static func fit(_ frame: CGRect) -> CGRect {
+        let screens = frames
+        let visibleArea = screens.map { $0.intersection(frame) }.filter { !$0.isNull }.map { $0.width * $0.height }.max() ?? 0
+        if visibleArea >= frame.width * frame.height * 0.5 { return frame }
+        let main = CGDisplayBounds(CGMainDisplayID())
+        let menuBar: CGFloat = 40
+        let width = min(frame.width, main.width - 40)
+        let height = min(frame.height, main.height - menuBar - 20)
+        return CGRect(x: main.minX + (main.width - width) / 2, y: main.minY + menuBar, width: width, height: height)
     }
 }
 

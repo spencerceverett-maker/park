@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Testing
 @testable import Park
@@ -142,6 +143,30 @@ import Testing
         #expect(Processes.displayCommand(["node", "/usr/local/bin/claude", "--resume"]) == "claude --resume")
         #expect(Processes.displayCommand(["/opt/homebrew/bin/npm", "run", "dev"]) == "npm run dev")
         #expect(Processes.displayCommand(["python3"]) == "python3")
+    }
+
+    @Test func savedCommandsNeverIncludeSecrets() {
+        #expect(Processes.safeCommandName(["/opt/homebrew/bin/npm", "run", "dev"]) == "npm run dev")
+        #expect(Processes.safeCommandName(["mysql", "-uroot", "-pHunter2"]) == "mysql")
+        #expect(Processes.safeCommandName(["curl", "-H", "Authorization: Bearer abc"]) == "curl")
+        #expect(Processes.safeCommandName(["psql", "postgres://user:pass@host/db"]) == "psql")
+        #expect(Processes.safeCommandName(["node", "/usr/local/bin/claude", "--resume", "abc"]) == "claude")
+    }
+
+    @Test func onlyOrdinaryTabURLsReopen() {
+        #expect(Engine.safeTabURL("https://example.com/a?b=1") == "https://example.com/a?b=1")
+        #expect(Engine.safeTabURL("chrome://settings") == "chrome://settings")
+        #expect(Engine.safeTabURL("javascript:alert(1)") == "about:blank")
+        #expect(Engine.safeTabURL("not a url") == "about:blank")
+    }
+
+    @Test func offscreenFramesMoveOntoTheMainDisplay() {
+        let main = CGDisplayBounds(CGMainDisplayID())
+        let onScreen = CGRect(x: main.minX + 50, y: main.minY + 60, width: 400, height: 300)
+        #expect(Screens.fit(onScreen) == onScreen)
+        let farAway = CGRect(x: main.maxX + 10_000, y: 0, width: 1200, height: 800)
+        let fitted = Screens.fit(farAway)
+        #expect(main.contains(fitted))
     }
 
     @Test func framesMatchWithinTolerance() {

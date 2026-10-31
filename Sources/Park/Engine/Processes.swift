@@ -24,9 +24,9 @@ enum Processes {
     static func arguments(_ pid: pid_t) -> (args: [String], env: [String: String]) {
         var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
         var size = 0
-        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 0 else { return ([], [:]) }
+        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 4 else { return ([], [:]) }
         var buffer = [UInt8](repeating: 0, count: size)
-        guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0 else { return ([], [:]) }
+        guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0, size > 4 else { return ([], [:]) }
         let argc = Int(buffer.withUnsafeBytes { $0.load(as: Int32.self) })
         var i = 4
         while i < size && buffer[i] != 0 { i += 1 }   // executable path
@@ -60,6 +60,18 @@ enum Processes {
         if parts.count > 1, interpreters.contains((parts[0] as NSString).lastPathComponent) { parts.removeFirst() }
         if let first = parts.first { parts[0] = (first as NSString).lastPathComponent }
         return parts.joined(separator: " ")
+    }
+
+    /// What's running, without anything that could be a secret: "npm run dev", "claude", "mysql".
+    /// Stops at the first flag, assignment, path or URL, so "mysql -pHunter2" is saved as "mysql".
+    static func safeCommandName(_ args: [String]) -> String {
+        let words = displayCommand(args).split(separator: " ").map(String.init)
+        var kept: [String] = []
+        for word in words.prefix(3) {
+            if !kept.isEmpty, word.hasPrefix("-") || word.contains("=") || word.contains("/") || word.contains(":") { break }
+            kept.append(word)
+        }
+        return kept.joined(separator: " ")
     }
 
     /// Total memory footprint of the given processes and all of their descendants.

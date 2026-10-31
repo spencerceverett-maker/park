@@ -34,10 +34,17 @@ Each parked desktop shows how much memory parking it freed. The panel's footer s
 | **Finder** | The folder each window showed |
 | **Document apps** (Preview, TextEdit, Pages, Office…) | The open file, in the same app and position |
 | **Everything else** | The app itself. Most apps (Slack, Notion, Linear…) restore their own state when relaunched |
+| **Safari, Firefox, Terminal, iTerm** | Not yet: their windows stay open |
 
 Apps whose windows were all on the parked desktop are quit, which frees the most memory. Apps you also use on other desktops just have that desktop's windows closed. A few companions stay running regardless: Finder, Slack, Messages, Mail, Calendar, Spotify, Music and Warp. You can turn quitting off in the ··· menu.
 
-Park never closes a window it can't bring back. If it can't read a window's contents, for example because a permission is missing, that window stays open and Park tells you why. It records everything before closing anything, so even a crash in the middle of parking can't lose windows: the next launch recovers them. If a terminal on the desktop is running something (a dev server, a CLI session), the panel warns you before you park.
+**Park never closes a window it can't bring back.** A window stays open, and the panel tells you why, when:
+
+- Park can't read it exactly: a missing permission, an incognito window, an unsaved local Figma file, or two same-sized Warp or Figma windows it can't tell apart.
+- it belongs to an app Park doesn't support tab by tab yet (Safari, Firefox, Terminal, iTerm).
+- it has nothing app-specific to save, and its app stays running because it's also in use on another desktop.
+
+Park also records everything before it closes anything, so a crash mid-park can't lose windows (the next launch recovers them), and it warns you before you park a terminal that's running something. After a restore, **Put back** returns the item to your list for ten minutes, in case something didn't come back the way you wanted.
 
 ## Install
 
@@ -92,11 +99,12 @@ build/Park.app/Contents/MacOS/Park --self-test   # open throwaway windows, park 
 
 ## Known limits
 
-- Windows reopen on whichever desktop you're on when you restore. Park doesn't recreate desktops.
+- Windows reopen on whichever desktop you're on when you restore. Park doesn't recreate desktops. If a window was on a monitor that's no longer connected, it's moved onto your main screen.
 - Browser tabs reload, so their back history, scroll position and form contents are gone. Tab groups and pinned tabs aren't scriptable, so those aren't restored.
-- Warp stops processes in closed windows (dev servers, CLI sessions) about a minute after closing. Park reopens the directories but doesn't rerun commands.
-- Unsaved, local-only Figma files can't be reopened by link, so those windows stay open.
-- Arc and Safari are restored as apps (Arc and Safari bring back their own windows), not tab by tab.
+- Chrome windows reopen in Chrome's most recently used profile, which may not be the one they were parked from.
+- Warp stops processes in closed windows (dev servers, CLI sessions) about a minute after closing. Park reopens the directories but doesn't rerun commands, and it saves only the program's name (like `npm run dev`), never the full command line.
+- Apps without specific support come back by relaunching. That relies on the app restoring its own windows, which most do, unless "Close windows when quitting an application" is turned on in System Settings → Desktop & Dock.
+- Only the active display's desktop is parked.
 
 ## License
 

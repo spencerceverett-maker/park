@@ -187,7 +187,7 @@ enum AX {
     /// Finder also returns its desktop window (no CGWindowID, _AXUIElementGetWindow fails) -> skipped.
     static func windows(pid: pid_t) -> [(AXUIElement, CGWindowID)] {
         let app = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(app, 1.0) // a hung app must not hang the whole park operation
+        AXUIElementSetMessagingTimeout(app, 3.0) // a hung app must not hang the whole park operation
         let wins: [AXUIElement] = attr(app, kAXWindowsAttribute) ?? []
         return wins.compactMap { w in windowID(w).map { (w, $0) } }
     }
@@ -352,7 +352,7 @@ enum AXClose {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if !windowExists(w.windowID, pid: w.pid) { return .closed }
-            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+            Thread.sleep(forTimeInterval: 0.05)
         }
         return windowExists(w.windowID, pid: w.pid) ? .stillOpen : .closed
     }
@@ -379,7 +379,7 @@ enum AppleScript {
     /// Compiles `source` once and calls handler `name` with typed args — no string interpolation of
     /// user data (URLs, paths) into source code, so no quoting/injection issues.
     static func call(_ source: String, handler name: String, _ args: [NSAppleEventDescriptor]) throws -> NSAppleEventDescriptor {
-        guard let script = NSAppleScript(source: source) else { throw Failure(info: ["msg": "compile"]) }
+        guard let script = NSAppleScript(source: withTimeout(source)) else { throw Failure(info: ["msg": "compile"]) }
         var err: NSDictionary?
         let params = NSAppleEventDescriptor.list()
         for (i, a) in args.enumerated() { params.insert(a, at: i + 1) }
@@ -394,6 +394,17 @@ enum AppleScript {
         if let err { throw Failure(info: err) }
         return r
     }
+    /// Wraps every `tell` block in a 10-second timeout, so a frozen app can't stall Park for minutes.
+    private static func withTimeout(_ source: String) -> String {
+        source.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("on "), trimmed.hasSuffix(")") { return "\(line)\nwith timeout of 10 seconds" }
+            if trimmed.hasPrefix("end "), !trimmed.hasPrefix("end tell"), !trimmed.hasPrefix("end if"),
+               !trimmed.hasPrefix("end repeat"), !trimmed.hasPrefix("end try") { return "end timeout\n\(line)" }
+            return String(line)
+        }.joined(separator: "\n")
+    }
+
     static func run(_ source: String) throws -> NSAppleEventDescriptor {
         var err: NSDictionary?
         let r = NSAppleScript(source: source)?.executeAndReturnError(&err)
@@ -459,6 +470,7 @@ enum Chrome {
             let f = AppleScript.items(w)
             guard f.count == 9 else { return nil }
             let b = AppleScript.items(f[2]).map { Int($0.int32Value) }
+            guard b.count == 4 else { return nil }
             let urls = AppleScript.items(f[4]).map { $0.stringValue ?? "" }
             let titles = AppleScript.items(f[5]).map { $0.stringValue ?? "" }
             return ChromeWindowSnapshot(
@@ -500,8 +512,9 @@ enum Chrome {
         let candidates = Set(ambiguous.flatMap { $0.1.map(\.chromeWindowID) }).subtracting(used)
         let originals = Dictionary(uniqueKeysWithValues: chrome.filter { candidates.contains($0.chromeWindowID) }.map { ($0.chromeWindowID, $0.givenName) })
         let token = "parking-\(UUID().uuidString.prefix(8))-"
-        for id in candidates { try setGivenName(id, token + String(id), bundleID: bundleID) }
+        // Restore names even if tagging fails partway, or windows would keep the temporary name.
         defer { for (id, name) in originals { try? setGivenName(id, name, bundleID: bundleID) } }
+        for id in candidates { try setGivenName(id, token + String(id), bundleID: bundleID) }
         Thread.sleep(forTimeInterval: 0.15) // title propagation to AX
         for (w, _) in ambiguous {
             guard let el = w.ax, let t: String = AX.attr(el, kAXTitleAttribute), t.hasPrefix(token),
@@ -603,6 +616,7 @@ enum Finder {
         return AppleScript.items(r).compactMap { w in
             let f = AppleScript.items(w); guard f.count == 6 else { return nil }
             let b = AppleScript.items(f[2]).map { Int($0.int32Value) }
+            guard b.count == 4 else { return nil }
             let p = f[1].stringValue ?? ""
             return FinderWindowSnapshot(finderWindowID: Int(f[0].int32Value), path: p.isEmpty ? nil : p,
                                         bounds: CGRect(x: b[0], y: b[1], width: b[2] - b[0], height: b[3] - b[1]),
@@ -651,16 +665,18 @@ enum Finder {
     /// Permission-free fallback for restore only: `NSWorkspace.open(folderURL)` opens a Finder window
     /// on the current Space (verified with `open <dir>`), then position it via AX. Capture still needs
     /// AppleScript (or the user's Finder window title → ambiguous path).
-    static func restoreWithoutAutomation(path: String, frame: CGRect) {
+    @discardableResult
+    static func restoreWithoutAutomation(path: String, frame: CGRect) -> Bool {
         NSWorkspace.shared.open(URL(fileURLWithPath: path, isDirectory: true))
         let deadline = Date().addingTimeInterval(3)
         let name = (path as NSString).lastPathComponent
         while Date() < deadline {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            Thread.sleep(forTimeInterval: 0.1)
             guard let pid = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first?.processIdentifier else { continue }
             if let (el, _) = AX.windows(pid: pid).first(where: { (AX.attr($0.0, kAXTitleAttribute) as String?) == name }) {
-                AX.setFrame(el, frame); return
+                AX.setFrame(el, frame); return true
             }
         }
+        return false
     }
 }

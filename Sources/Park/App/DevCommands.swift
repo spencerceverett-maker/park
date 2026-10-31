@@ -26,6 +26,7 @@ enum DevCommands {
 
     private static func dryRun() async {
         print("Desktop detection: \(Private.hasSpaces && Private.getWindow != nil ? "full" : "conservative (private calls unavailable)")")
+        print("Accessibility: \(AXIsProcessTrusted() ? "granted" : "not granted")")
         do {
             let result = try await Engine().parkCurrentDesktop(quitApps: false, dryRun: true)
             print("Would park “\(result.spot.name)” — \(result.spot.summary)")
@@ -93,6 +94,9 @@ enum DevCommands {
 
         let fresh = await engine.currentWindowIDs().subtracting(before)
         print("New windows on this desktop: \(fresh.count)")
+        for window in CurrentSpace.windows() where fresh.contains(window.windowID) {
+            print("  \(window.appName) “\(window.title ?? "")” ax=\(window.ax != nil) doc=\(window.documentURL?.lastPathComponent ?? "none") elsewhere=\(QuitPolicy.windowsElsewhere(pid: window.pid).count)")
+        }
         do {
             let result = try await engine.parkCurrentDesktop(quitApps: false, only: fresh)
             SpotStore.clearPending()
@@ -117,6 +121,9 @@ enum DevCommands {
             print("Cleaned up test windows.")
         } catch {
             print("✗ error: \(error.localizedDescription)")
+            if case ParkError.nothingParkable(let notes) = error { notes.forEach { print("  note: \($0)") } }
+            // Close whatever the test opened so nothing is left behind.
+            for window in CurrentSpace.windows() where !before.contains(window.windowID) { AXClose.close(window) }
         }
         _ = try? AppleScript.run("tell application id \"com.apple.TextEdit\" to quit saving no")
         try? FileManager.default.removeItem(at: folder)

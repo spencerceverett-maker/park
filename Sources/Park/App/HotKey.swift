@@ -24,7 +24,8 @@ final class HotKey {
         if modifiers.contains(.shift) { carbonModifiers |= UInt32(shiftKey) }
 
         let hotKeyID = EventHotKeyID(signature: OSType(0x5041524B), id: id) // 'PARK'
-        RegisterEventHotKey(keyCode, carbonModifiers, hotKeyID, GetApplicationEventTarget(), 0, &ref)
+        let status = RegisterEventHotKey(keyCode, carbonModifiers, hotKeyID, GetApplicationEventTarget(), 0, &ref)
+        if status != noErr { Log.write("keyboard shortcut unavailable (another app may use it): \(status)") }
     }
 
     deinit {

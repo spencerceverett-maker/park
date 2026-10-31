@@ -26,12 +26,18 @@ enum FigmaAdapter {
         let params: String    // "?node-id=…&p=f&viewport=…&t=…"
     }
 
-    /// Parked content for each Figma window on this desktop, keyed by window ID. Windows showing only the
-    /// file browser come back as `.app`. Windows whose tabs can't be read are left out, so they stay open.
-    static func capture(_ windows: [ParkableWindow]) -> [CGWindowID: ParkedWindow.Content] {
-        var result: [CGWindowID: ParkedWindow.Content] = [:]
+    enum Capture: Equatable {
+        case content(ParkedWindow.Content)
+        /// The window can't be parked faithfully; it stays open and the reason is shown.
+        case keepOpen(String)
+    }
+
+    /// What to park for each Figma window on this desktop, keyed by window ID. A window with no entry
+    /// couldn't be matched to Figma's saved state, so it stays open.
+    static func capture(_ windows: [ParkableWindow]) -> [CGWindowID: Capture] {
+        var result: [CGWindowID: Capture] = [:]
         // Figma writes new windows to settings.json a few seconds late; give it a moment before giving up.
-        for attempt in 0..<4 {
+        for attempt in 0..<3 {
             if attempt > 0 { Thread.sleep(forTimeInterval: 1.5) }
             result = match(windows, readStates())
             if result.count == windows.count { break }
@@ -45,23 +51,37 @@ enum FigmaAdapter {
         return states
     }
 
-    private static func match(_ windows: [ParkableWindow], _ states: [WindowState]) -> [CGWindowID: ParkedWindow.Content] {
-        var used = Set<String>()
-        var result: [CGWindowID: ParkedWindow.Content] = [:]
+    /// Settings list Figma windows on every desktop, and maximized windows on two desktops share a frame.
+    /// A window is matched only when exactly one saved window fits; anything ambiguous stays open.
+    private static func match(_ windows: [ParkableWindow], _ states: [WindowState]) -> [CGWindowID: Capture] {
+        var result: [CGWindowID: Capture] = [:]
         for window in windows {
-            let byFrame = states.first { !used.contains($0.id) && $0.frame.isClose(to: window.frame) }
-            let byTitle = states.first { !used.contains($0.id) && $0.activeTab?.title == window.title }
-            guard let state = byFrame ?? byTitle else { continue }
-            used.insert(state.id)
-            // Local, never-saved files can't be reopened by link.
-            let tabs = state.tabs.filter { !$0.params.contains("localFileKey=") && $0.path.hasPrefix("/file/") }
-            if tabs.isEmpty {
-                if state.tabs.isEmpty { result[window.windowID] = .app }
+            var candidates = states.filter { $0.frame.isClose(to: window.frame) }
+            if candidates.count > 1 {
+                candidates = candidates.filter { $0.activeTab?.title == window.title }
+            } else if candidates.isEmpty, let title = window.title, !title.isEmpty {
+                // Maximized windows are stored with a slightly different height; fall back to a unique title.
+                let byTitle = states.filter { $0.activeTab?.title == title }
+                if byTitle.count == 1 { candidates = byTitle }
+            }
+            guard candidates.count == 1, let state = candidates.first else { continue }
+
+            if state.tabs.isEmpty {
+                result[window.windowID] = .content(.app)   // only the file browser
                 continue
             }
-            let files = tabs.map { FigmaFile(url: deepLink($0), title: $0.title) }
-            let active = tabs.firstIndex { $0.path == state.activeTabPath } ?? 0
-            result[window.windowID] = .figma(files: files, activeIndex: active)
+            if state.tabs.contains(where: { $0.params.contains("localFileKey=") }) {
+                result[window.windowID] = .keepOpen("A Figma window stayed open because it has an unsaved local file.")
+                continue
+            }
+            // design, FigJam and Slides files all live under /file/; prototypes and presenter views don't.
+            guard state.tabs.allSatisfy({ $0.path.hasPrefix("/file/") }) else {
+                result[window.windowID] = .keepOpen("A Figma window stayed open because it has a prototype or presentation tab Park can’t reopen.")
+                continue
+            }
+            let files = state.tabs.map { FigmaFile(url: deepLink($0), title: $0.title) }
+            let active = state.tabs.firstIndex { $0.path == state.activeTabPath } ?? 0
+            result[window.windowID] = .content(.figma(files: files, activeIndex: active))
         }
         return result
     }
@@ -88,9 +108,10 @@ enum FigmaAdapter {
 
         // Create the window before activating Figma: activating an app whose windows are all on other
         // desktops switches you to one of them. New windows always appear on the current desktop.
-        guard AXMenu.click(pid: pid, "File", "New Window") else { return false }
+        // A busy Figma can report the click as failed and still open the window, so judge by the window.
+        AXMenu.click(pid: pid, "File", "New Window")
         var created: AXUIElement?
-        let deadline = Date().addingTimeInterval(5)
+        let deadline = Date().addingTimeInterval(8)
         while created == nil && Date() < deadline {
             Thread.sleep(forTimeInterval: 0.2)
             created = AX.windows(pid: pid).first { !before.contains($0.1) }?.0
@@ -105,7 +126,7 @@ enum FigmaAdapter {
         var ordered = files
         if files.indices.contains(activeIndex) { ordered.append(ordered.remove(at: activeIndex)) }
         for file in ordered {
-            guard let url = URL(string: file.url) else { continue }
+            guard let url = URL(string: file.url), url.scheme == "figma" else { continue }
             NSWorkspace.shared.open(url)
             Thread.sleep(forTimeInterval: 1.5)
         }

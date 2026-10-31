@@ -20,30 +20,52 @@ enum WarpAdapter {
         let frame: CGRect
         let activeTabIndex: Int
         var tabs: [TerminalTab]
+
+        /// Text Warp may show as the window title: the active tab's name, folder, or running program.
+        var titleHints: [String] {
+            guard tabs.indices.contains(activeTabIndex) else { return [] }
+            let tab = tabs[activeTabIndex]
+            var hints = tab.title.map { [$0] } ?? []
+            for pane in tab.layout.panes {
+                let folder = (pane.directory as NSString).lastPathComponent
+                if !folder.isEmpty, pane.directory != NSHomeDirectory() { hints.append(folder) }
+                if let command = pane.command { hints.append(command) }
+            }
+            return hints
+        }
     }
 
     /// One shell's live state, joined to a pane by session UUID or, failing that, by directory.
     private struct Shell { let pid: pid_t; let directory: String?; let sessionUUID: String?; let running: String? }
 
+    /// Warp's database lists windows on every desktop, and same-sized windows share a frame. A window is
+    /// matched only when exactly one saved window fits; anything ambiguous or incomplete stays open.
     static func capture(_ windows: [ParkableWindow]) -> [CGWindowID: ParkedWindow.Content] {
-        let states = readWindowStates()
-        var used = Set<Int>()
+        guard let states = readWindowStates() else { return [:] }
         var result: [CGWindowID: ParkedWindow.Content] = [:]
         for window in windows {
-            guard let index = states.indices.first(where: { !used.contains($0) && states[$0].frame.isClose(to: window.frame) })
-            else { continue }
-            used.insert(index)
-            result[window.windowID] = .terminal(tabs: states[index].tabs, activeIndex: states[index].activeTabIndex)
+            var candidates = states.filter { $0.frame.isClose(to: window.frame) }
+            if candidates.count > 1 {
+                guard let title = window.title, !title.isEmpty else { continue }
+                candidates = candidates.filter { $0.titleHints.contains { title.localizedCaseInsensitiveContains($0) } }
+            }
+            guard candidates.count == 1, let state = candidates.first, !state.tabs.isEmpty else { continue }
+            result[window.windowID] = .terminal(tabs: state.tabs, activeIndex: state.activeTabIndex)
         }
         return result
     }
 
-    private static func readWindowStates() -> [WindowState] {
+    /// nil if the database couldn't be read completely; a partial read must never be parked.
+    private static func readWindowStates() -> [WindowState]? {
         var db: OpaquePointer?
-        guard sqlite3_open_v2(databasePath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else { return [] }
+        guard sqlite3_open_v2(databasePath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else { sqlite3_close(db); return nil }
         defer { sqlite3_close(db) }
+        // Warp writes while it runs: wait out its locks, and read everything from one snapshot.
+        sqlite3_busy_timeout(db, 2000)
+        guard sqlite3_exec(db, "BEGIN", nil, nil, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_exec(db, "COMMIT", nil, nil, nil) }
 
-        let nodes = rows(db, """
+        guard let nodes = rows(db, """
             SELECT n.id, n.tab_id, n.parent_pane_node_id AS parent, n.is_leaf, b.horizontal,
                    l.is_focused, tp.uuid, tp.cwd
             FROM pane_nodes n
@@ -51,7 +73,7 @@ enum WarpAdapter {
             LEFT JOIN pane_leaves l ON l.pane_node_id = n.id
             LEFT JOIN terminal_panes tp ON tp.id = n.id
             ORDER BY n.id
-            """)
+            """) else { return nil }
         let shells = liveShells()
         var claimed = Set<pid_t>()
 
@@ -74,11 +96,14 @@ enum WarpAdapter {
             return .split(horizontal: (node["horizontal"] as? Int) == 1, panes: children)
         }
 
-        let tabs = rows(db, "SELECT id, window_id, custom_title FROM tabs ORDER BY id")
-        let screenHeight = NSScreen.screens.first?.frame.height ?? 0
-        return rows(db, "SELECT * FROM windows ORDER BY id").map { window in
+        guard let tabs = rows(db, "SELECT id, window_id, custom_title FROM tabs ORDER BY id"),
+              let windows = rows(db, "SELECT * FROM windows ORDER BY id") else { return nil }
+        // The primary display's height, read without touching NSScreen off the main thread.
+        let screenHeight = CGDisplayBounds(CGMainDisplayID()).height
+        return windows.map { window in
             let windowID = window["id"] as? Int
-            let windowTabs: [TerminalTab] = tabs.filter { $0["window_id"] as? Int == windowID }.compactMap { tab in
+            let tabRows = tabs.filter { $0["window_id"] as? Int == windowID }
+            let windowTabs: [TerminalTab] = tabRows.compactMap { tab in
                 guard let root = nodes.first(where: { $0["tab_id"] as? Int == tab["id"] as? Int && $0["parent"] == nil }),
                       let rootID = root["id"] as? Int, let layout = build(rootID) else { return nil }
                 return TerminalTab(title: tab["custom_title"] as? String, layout: layout)
@@ -87,7 +112,9 @@ enum WarpAdapter {
                                y: (window["origin_y"] as? Double ?? 0) + screenHeight,
                                width: window["window_width"] as? Double ?? 0,
                                height: window["window_height"] as? Double ?? 0)
-            return WindowState(frame: frame, activeTabIndex: window["active_tab_index"] as? Int ?? 0, tabs: windowTabs)
+            // A tab without a readable layout means the read is incomplete; drop the whole window.
+            return WindowState(frame: frame, activeTabIndex: window["active_tab_index"] as? Int ?? 0,
+                               tabs: windowTabs.count == tabRows.count ? windowTabs : [])
         }
     }
 
@@ -104,7 +131,7 @@ enum WarpAdapter {
             var running: String?
             if shell.tpgid > 0, shell.tpgid != shell.pgid, let leader = processes.first(where: { $0.pid == shell.tpgid }) {
                 let args = Processes.arguments(leader.pid).args
-                running = args.isEmpty ? leader.comm : Processes.displayCommand(args)
+                running = args.isEmpty ? leader.comm : Processes.safeCommandName(args)
             }
             return Shell(pid: shell.pid, directory: Processes.workingDirectory(shell.pid),
                          sessionUUID: uuid?.lowercased().replacingOccurrences(of: "-", with: ""), running: running)
@@ -115,24 +142,38 @@ enum WarpAdapter {
 
     /// Writes a launch configuration into Warp's folder, opens it, and removes it once Warp has read it.
     /// (Warp ignores launch configs outside that folder, and escaped slashes break parsing.)
+    /// Returns true once the new window has appeared on this desktop.
     static func restore(tabs: [TerminalTab], activeIndex: Int) -> Bool {
         guard !tabs.isEmpty else { return false }
         let name = "park-\(UUID().uuidString.prefix(8).lowercased())"
         let file = launchDirectory.appendingPathComponent("\(name).yaml")
+        defer { try? FileManager.default.removeItem(at: file) }
         do {
             try FileManager.default.createDirectory(at: launchDirectory, withIntermediateDirectories: true)
-            try launchConfig(name: name, tabs: tabs, activeIndex: activeIndex).write(to: file, atomically: false, encoding: .utf8)
+            try launchConfig(name: name, tabs: tabs, activeIndex: activeIndex).write(to: file, atomically: true, encoding: .utf8)
         } catch {
             return false
         }
-        _ = Launcher.ensureRunning(bundleID: bundleID, settle: 2)
+        guard let app = Launcher.ensureRunning(bundleID: bundleID, settle: 2),
+              let url = URL(string: "warp://launch/\(name).yaml") else { return false }
+        let before = Set(AX.windows(pid: app.processIdentifier).map(\.1))
+        // Warp watches its launch-config folder; give it a moment to see the new file.
         Thread.sleep(forTimeInterval: 1)
-        guard let url = URL(string: "warp://launch/\(name).yaml") else { return false }
         NSWorkspace.shared.open(url)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
+        let deadline = Date().addingTimeInterval(8)
+        while Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.25)
+            if AX.windows(pid: app.processIdentifier).contains(where: { !before.contains($0.1) }) { return true }
+        }
+        return false
+    }
+
+    /// Removes launch configs left behind if Park quit mid-restore, so they don't linger in Warp's list.
+    static func removeLeftoverLaunchConfigs() {
+        let files = (try? FileManager.default.contentsOfDirectory(at: launchDirectory, includingPropertiesForKeys: nil)) ?? []
+        for file in files where file.lastPathComponent.hasPrefix("park-") && file.pathExtension == "yaml" {
             try? FileManager.default.removeItem(at: file)
         }
-        return true
     }
 
     /// JSON is valid YAML, and JSONSerialization handles all quoting.
@@ -163,12 +204,14 @@ enum WarpAdapter {
 
     // MARK: SQLite
 
-    private static func rows(_ db: OpaquePointer?, _ sql: String) -> [[String: Any]] {
+    /// nil unless every row was read.
+    private static func rows(_ db: OpaquePointer?, _ sql: String) -> [[String: Any]]? {
         var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { return [] }
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_finalize(statement) }
         var result: [[String: Any]] = []
-        while sqlite3_step(statement) == SQLITE_ROW {
+        var step = sqlite3_step(statement)
+        while step == SQLITE_ROW {
             var row: [String: Any] = [:]
             for i in 0..<sqlite3_column_count(statement) {
                 let name = String(cString: sqlite3_column_name(statement, i))
@@ -184,8 +227,9 @@ enum WarpAdapter {
                 }
             }
             result.append(row)
+            step = sqlite3_step(statement)
         }
-        return result
+        return step == SQLITE_DONE ? result : nil
     }
 }
 
