@@ -162,6 +162,12 @@ import Testing
 
     @Test func offscreenFramesMoveOntoTheMainDisplay() {
         let main = CGDisplayBounds(CGMainDisplayID())
+        let far = CGRect(x: 90_000, y: 0, width: 1200, height: 800)
+        guard !Screens.frames.isEmpty, !main.isEmpty else {
+            // Without a display session (CI, locked screen) frames must be left alone.
+            #expect(Screens.fit(far) == far)
+            return
+        }
         let onScreen = CGRect(x: main.minX + 50, y: main.minY + 60, width: 400, height: 300)
         #expect(Screens.fit(onScreen) == onScreen)
         let farAway = CGRect(x: main.maxX + 10_000, y: 0, width: 1200, height: 800)

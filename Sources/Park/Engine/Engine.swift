@@ -549,6 +549,8 @@ enum Screens {
     /// put windows out of sight.
     static func fit(_ frame: CGRect) -> CGRect {
         let screens = frames
+        // No display information (locked screen, no window-server session): leave the frame alone.
+        guard !screens.isEmpty, !CGDisplayBounds(CGMainDisplayID()).isEmpty else { return frame }
         let visibleArea = screens.map { $0.intersection(frame) }.filter { !$0.isNull }.map { $0.width * $0.height }.max() ?? 0
         if visibleArea >= frame.width * frame.height * 0.5 { return frame }
         let main = CGDisplayBounds(CGMainDisplayID())
