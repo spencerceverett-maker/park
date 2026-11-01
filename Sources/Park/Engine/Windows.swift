@@ -369,6 +369,28 @@ enum AXClose {
         guard let pid, AXIsProcessTrusted() else { return false }
         return AX.windows(pid: pid).contains { $0.1 == wid }
     }
+
+    /// The question an app shows before it closes or quits: a sheet on the window ("Save changes?"),
+    /// or a separate dialog window. nil when there is none, or when the app draws its own (Warp does),
+    /// which Accessibility can't see.
+    static func question(for w: ParkableWindow) -> AXUIElement? {
+        if let el = w.ax {
+            let children: [AXUIElement] = AX.attr(el, kAXChildrenAttribute) ?? []
+            if let sheet = children.first(where: { AX.attr($0, kAXRoleAttribute) == kAXSheetRole as String }) { return sheet }
+        }
+        let dialogs: Set<String> = [kAXDialogSubrole as String, kAXSystemDialogSubrole as String]
+        return AX.windows(pid: w.pid).first { element, id in
+            id != w.windowID && (dialogs.contains(AX.attr(element, kAXSubroleAttribute) ?? "")
+                || AX.attr(element, kAXModalAttribute) == true)
+        }?.0
+    }
+
+    /// Presses the question's Cancel button, so the window can't close later without being parked.
+    @discardableResult
+    static func cancel(_ question: AXUIElement) -> Bool {
+        guard let button = AX.element(question, kAXCancelButtonAttribute) else { return false }
+        return AXUIElementPerformAction(button, kAXPressAction as CFString) == .success
+    }
 }
 
 // MARK: - AppleScript runner ---------------------------------------------------------------
