@@ -273,25 +273,27 @@ function wireDemo() {
     restack();
   }
 
-  /* ---- Dragging by the title bar ---- */
+  /* ---- Dragging: anywhere on the window with a mouse, by the title bar on touch ---- */
 
   for (const win of draggables) {
-    const bar = $(".win-bar", win);
     let drag = null;
 
     win.addEventListener("pointerdown", () => { if (isVisible(win)) bringToFront(win); });
 
-    bar.addEventListener("pointerdown", (event) => {
-      if (drag || event.button !== 0 || event.target.closest(".tl") || !isVisible(win)) return;
+    win.addEventListener("pointerdown", (event) => {
+      if (drag || event.button !== 0 || event.target.closest("button") || !isVisible(win)) return;
+      // On touch, the window body scrolls the page; only the title bar drags.
+      if (event.pointerType === "touch" && !event.target.closest(".win-bar")) return;
+      event.preventDefault();   // no text selection while dragging
       if (showingDesktop) toggleShowDesktop(false);
       const s = state.get(win);
       cancelAnimationFrame(s.frame);
       drag = { id: event.pointerId, startX: event.clientX - s.x, startY: event.clientY - s.y, history: [] };
-      try { bar.setPointerCapture(event.pointerId); } catch {}
+      try { win.setPointerCapture(event.pointerId); } catch {}
       // Parking or closing mid-drag lets go of the window.
       s.cancelDrag = () => {
         if (!drag) return;
-        try { bar.releasePointerCapture(drag.id); } catch {}
+        try { win.releasePointerCapture(drag.id); } catch {}
         const size = deskSize();
         s.fx = s.x / size.w; s.fy = s.y / size.h;   // remember where it was let go, for resizes
         drag = null;
@@ -301,7 +303,7 @@ function wireDemo() {
       closeMenus();
     });
 
-    bar.addEventListener("pointermove", (event) => {
+    win.addEventListener("pointermove", (event) => {
       if (!drag || event.pointerId !== drag.id) return;
       const s = state.get(win);
       const b = bounds(win);
@@ -343,9 +345,9 @@ function wireDemo() {
       s.fx = target.x / size.w; s.fy = target.y / size.h;
       springTo(s, target, () => render(win));
     };
-    bar.addEventListener("pointerup", end);
-    bar.addEventListener("pointercancel", end);
-    bar.addEventListener("lostpointercapture", end);
+    win.addEventListener("pointerup", end);
+    win.addEventListener("pointercancel", end);
+    win.addEventListener("lostpointercapture", end);
 
     // Traffic lights.
     $("[data-close]", win)?.addEventListener("click", () => closeWindow(win));
