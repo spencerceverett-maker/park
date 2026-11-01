@@ -129,7 +129,8 @@ private struct DesktopSection: View {
                 HStack(spacing: 8) {
                     if model.isParking {
                         ProgressView().controlSize(.small).tint(.white)
-                        Text("Parking…")
+                        Text(model.waitingFor.map { "Waiting for \(NameList.string($0))…" } ?? "Parking…")
+                            .lineLimit(1)
                     } else {
                         Text("Park this desktop")
                         KeyHint(text: "↩", onAccent: true)

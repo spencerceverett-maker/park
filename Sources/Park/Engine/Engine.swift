@@ -56,15 +56,18 @@ final class Engine {
     /// - Parameters:
     ///   - only: restrict to these windows (used by the self-test so it never touches real work).
     ///   - dryRun: capture everything but close nothing.
-    func parkCurrentDesktop(quitApps: Bool, only: Set<CGWindowID>? = nil, dryRun: Bool = false) async throws -> ParkResult {
-        try await runThrowing { [self] in try park(quitApps: quitApps, only: only, dryRun: dryRun) }
+    ///   - onWaiting: called with the names of apps Park is waiting on (an app asked a question before
+    ///     closing), and with nil once it stops waiting. Called on the engine's queue.
+    func parkCurrentDesktop(quitApps: Bool, only: Set<CGWindowID>? = nil, dryRun: Bool = false,
+                            onWaiting: @escaping ([String]?) -> Void = { _ in }) async throws -> ParkResult {
+        try await runThrowing { [self] in try park(quitApps: quitApps, only: only, dryRun: dryRun, onWaiting: onWaiting) }
     }
 
     func currentWindowIDs() async -> Set<CGWindowID> {
         await run { Set(CurrentSpace.windows().map(\.windowID)) }
     }
 
-    private func park(quitApps: Bool, only: Set<CGWindowID>?, dryRun: Bool) throws -> ParkResult {
+    private func park(quitApps: Bool, only: Set<CGWindowID>?, dryRun: Bool, onWaiting: ([String]?) -> Void) throws -> ParkResult {
         let space = Spaces.activeSpace
         let windows = CurrentSpace.windows().filter { $0.bundleID != nil && (only?.contains($0.windowID) ?? true) }
         guard !windows.isEmpty else { throw ParkError.nothingToPark }
@@ -217,6 +220,9 @@ final class Engine {
         // Close. Apps that will be quit and have nothing app-specific to restore are just quit,
         // so their own state restoration brings their windows back on relaunch.
         var closed = Set<CGWindowID>()
+        /// Windows that got the close command but are still open, usually because their app is asking
+        /// a question first ("Stop the running process?", "Save changes?").
+        var asking: [ParkableWindow] = []
         var quitWithoutClosing = Set<pid_t>()
         for pid in quitPIDs where apps[pid]?.allSatisfy({ contents[$0.windowID] == nil }) == true {
             quitWithoutClosing.insert(pid)
@@ -225,18 +231,26 @@ final class Engine {
             if quitWithoutClosing.contains(window.pid) { closed.insert(window.windowID); continue }
             if let id = browserIDs[window.windowID], let bundleID = window.bundleID {
                 // A "Leave site?" prompt keeps a window open even when the close command succeeds.
-                if (try? Chrome.close(chromeWindowID: id, bundleID: bundleID)) != nil,
-                   Self.waitUntilGone(window.windowID, pid: window.pid) {
-                    closed.insert(window.windowID)
+                if (try? Chrome.close(chromeWindowID: id, bundleID: bundleID)) != nil {
+                    if Self.waitUntilGone(window.windowID, pid: window.pid) { closed.insert(window.windowID) } else { asking.append(window) }
                 }
             } else if let id = finderIDs[window.windowID] {
-                if (try? Finder.close(finderWindowID: id)) != nil, Self.waitUntilGone(window.windowID, pid: window.pid) {
-                    closed.insert(window.windowID)
+                if (try? Finder.close(finderWindowID: id)) != nil {
+                    if Self.waitUntilGone(window.windowID, pid: window.pid) { closed.insert(window.windowID) } else { asking.append(window) }
                 }
-            } else if AXClose.close(window) == .closed {
-                closed.insert(window.windowID)
+            } else {
+                switch AXClose.close(window) {
+                case .closed: closed.insert(window.windowID)
+                case .stillOpen: asking.append(window)
+                case .noCloseButton, .notTrusted: break
+                }
             }
         }
+
+        // Wait for the person to answer. Without this, a window that closes after Park moves on is
+        // closed but never saved.
+        let answered = awaitAnswers(asking, notes: &notes, onWaiting: onWaiting)
+        closed.formUnion(answered)
 
         var terminated = Set<pid_t>()
         for pid in quitPIDs {
@@ -251,15 +265,14 @@ final class Engine {
             terminated.insert(pid)
         }
         waitForTermination(of: terminated, timeout: 8)
-        for pid in terminated {
-            guard let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated else { continue }
-            // Still running. If its windows are still here it's probably asking about unsaved changes;
-            // if they're gone it's just slow to quit, and its windows are parked.
-            let stillOpen = (apps[pid] ?? []).filter { AXClose.windowExists($0.windowID, pid: pid) }
-            guard !stillOpen.isEmpty else { continue }
-            stillOpen.forEach { closed.remove($0.windowID) }
-            notes.append("\(app.localizedName ?? "An app") is asking about unsaved changes, so it stayed open.")
+        // Still running with its windows here: it's probably asking about unsaved changes. If its
+        // windows are gone it's just slow to quit, and they're parked.
+        let quitAsking = terminated.flatMap { pid -> [ParkableWindow] in
+            guard let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated else { return [] }
+            return (apps[pid] ?? []).filter { AXClose.windowExists($0.windowID, pid: pid) }
         }
+        quitAsking.forEach { closed.remove($0.windowID) }
+        closed.formUnion(awaitAnswers(quitAsking, notes: &notes, onWaiting: onWaiting))
 
         let closedWindows = parked(parkable.filter { closed.contains($0.windowID) })
         let stuck = parkable.count - closedWindows.count
@@ -301,6 +314,61 @@ final class Engine {
             Thread.sleep(forTimeInterval: 0.1)
         }
         return !AXClose.windowExists(windowID, pid: pid)
+    }
+
+    /// How long Park waits for someone to answer an app's question before it gives up on that window.
+    static let answerTimeout: TimeInterval = 60
+
+    /// Waits while apps ask a question before closing. Returns the windows that closed: they're parked.
+    /// A window stays open (and isn't parked) when its question goes away and the window is still there,
+    /// which means the person chose Cancel, or when time runs out. A question still showing when time
+    /// runs out is cancelled where possible, so the window can't close later without being saved.
+    private func awaitAnswers(_ windows: [ParkableWindow], notes: inout [String],
+                              onWaiting: ([String]?) -> Void) -> Set<CGWindowID> {
+        guard !windows.isEmpty else { return [] }
+        var pending = windows
+        var closed = Set<CGWindowID>()
+        var keptOpen: [ParkableWindow] = []
+        /// Windows whose question Accessibility could see. Apps that draw their own (Warp) never get here,
+        /// so for them Park can only wait.
+        var sawQuestion = Set<CGWindowID>()
+        let deadline = Date().addingTimeInterval(Self.answerTimeout)
+        var lastReported: [String] = []
+        while !pending.isEmpty, Date() < deadline {
+            pending.removeAll { window in
+                if !AXClose.windowExists(window.windowID, pid: window.pid) {
+                    closed.insert(window.windowID)
+                    return true
+                }
+                if AXClose.question(for: window) != nil {
+                    sawQuestion.insert(window.windowID)
+                } else if sawQuestion.contains(window.windowID) {
+                    keptOpen.append(window)   // the question went away and the window didn't: Cancel
+                    return true
+                }
+                return false
+            }
+            var names: [String] = []
+            for window in pending where !names.contains(window.appName) { names.append(window.appName) }
+            if !names.isEmpty, names != lastReported {
+                onWaiting(names)
+                lastReported = names
+            }
+            if !pending.isEmpty { Thread.sleep(forTimeInterval: 0.25) }
+        }
+        onWaiting(nil)
+
+        for window in pending {
+            if let question = AXClose.question(for: window) { AXClose.cancel(question) }
+        }
+        var noted: [String] = []
+        for window in keptOpen + pending where !noted.contains(window.appName) {
+            noted.append(window.appName)
+            notes.append(pending.contains(where: { $0.appName == window.appName })
+                ? "\(window.appName) was still asking a question, so its window stayed open and wasn’t parked."
+                : "\(window.appName) stayed open because you chose to keep it.")
+        }
+        return closed
     }
 
     private func waitForTermination(of pids: Set<pid_t>, timeout: TimeInterval) {

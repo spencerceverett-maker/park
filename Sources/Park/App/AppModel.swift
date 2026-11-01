@@ -44,6 +44,8 @@ final class AppModel {
     var preview: DesktopPreview?
     var hasAccessibility = AXIsProcessTrusted()
     var isParking = false
+    /// Apps that asked a question before closing ("Save changes?"); parking waits for the answer.
+    var waitingFor: [String]?
     var restoringID: Spot.ID?
     var justParkedID: Spot.ID?
     var toast: Toast?
@@ -112,11 +114,13 @@ final class AppModel {
         guard !isParking else { return }
         isParking = true
         errorMessage = nil
-        defer { isParking = false }
+        defer { isParking = false; waitingFor = nil }
 
         do {
             // The tour parks only its practice windows and never quits an app.
-            let result = try await engine.parkCurrentDesktop(quitApps: isTouring ? false : quitApps, only: tourScope)
+            let result = try await engine.parkCurrentDesktop(quitApps: isTouring ? false : quitApps, only: tourScope) { names in
+                Task { @MainActor [weak self] in self?.waitingFor = names }
+            }
             var spot = result.spot
             if isTouring { spot.name = "Practice" }
             Log.write("parked \(spot.windows.count) windows (\(Set(spot.windows.map(\.appName)).sorted().joined(separator: ", "))); \(result.notes.count) notes")
