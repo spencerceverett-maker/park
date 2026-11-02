@@ -103,6 +103,7 @@ final class Engine {
                     }
                 } catch {
                     appWindows.forEach { leaveOpen.insert($0.windowID) }
+                    Log.write("\(name) scripting failed: \(error)")
                     notes.append("\(name) stayed open. Allow Park to control \(name) in System Settings → Privacy & Security → Automation.")
                 }
 
@@ -142,6 +143,7 @@ final class Engine {
                     }
                 } catch {
                     appWindows.forEach { leaveOpen.insert($0.windowID) }
+                    Log.write("Finder scripting failed: \(error)")
                     notes.append("Finder windows stayed open. Allow Park to control Finder in System Settings → Privacy & Security → Automation.")
                 }
 
