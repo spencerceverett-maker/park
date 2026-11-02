@@ -131,6 +131,17 @@ final class Engine {
                     notes.append("A Warp window stayed open because Park couldn’t read its tabs.")
                 }
 
+            case NotionAdapter.bundleID:
+                // If Notion can be quit, it brings back its own windows and tabs when it opens again.
+                if quitApps, QuitPolicy.windowsElsewhere(pid: appWindows[0].pid).isEmpty { break }
+                let captured = NotionAdapter.capture(appWindows)
+                contents.merge(captured) { $1 }
+                let unmatched = appWindows.filter { captured[$0.windowID] == nil }
+                if !unmatched.isEmpty {
+                    unmatched.forEach { leaveOpen.insert($0.windowID) }
+                    notes.append(NotionAdapter.unmatchedNote)
+                }
+
             case Finder.bundleID:
                 do {
                     let snapshots = try Finder.listWindows()
@@ -415,6 +426,10 @@ final class Engine {
                 let title = Self.shortTitle(tabs[active].title)
                 if !title.isEmpty { return title }
             }
+            if case .notion(let tabs, let active) = window.content, tabs.indices.contains(active) {
+                let title = Self.shortTitle(tabs[active].title)
+                if !title.isEmpty { return title }
+            }
         }
         var seen = Set<String>()
         return NameList.string(windows.compactMap { seen.insert($0.appName).inserted ? $0.appName : nil })
@@ -475,6 +490,9 @@ final class Engine {
 
             case .terminal(let tabs, let activeIndex):
                 ok = WarpAdapter.restore(tabs: tabs, activeIndex: activeIndex)
+
+            case .notion(let tabs, let activeIndex):
+                ok = NotionAdapter.restore(tabs: tabs, activeIndex: activeIndex, frame: window.frame)
 
             case .folder(let path):
                 guard FileManager.default.fileExists(atPath: path) else { ok = false; break }
