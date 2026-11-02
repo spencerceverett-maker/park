@@ -109,12 +109,20 @@ final class AppModel {
         }
     }
 
+    /// Makes Park the active app. When the active app's last window on a desktop closes, macOS switches
+    /// to that app's windows on another desktop. Park has no windows of its own to switch to, so you stay.
+    @MainActor
+    private func stayOnThisDesktop() {
+        NSApp.activate()
+    }
+
     @MainActor
     func park() async {
         guard !isParking else { return }
         isParking = true
         errorMessage = nil
         defer { isParking = false; waitingFor = nil }
+        stayOnThisDesktop()
 
         do {
             // The tour parks only its practice windows and never quits an app.
@@ -157,6 +165,7 @@ final class AppModel {
 
         // Get the panel out of the way so restored windows come forward cleanly (the tour keeps it open).
         if !isTouring { dismissPanel() }
+        stayOnThisDesktop()
         let failures = await engine.restore(spot)
         Log.write("restored \(spot.windows.count - failures.count) of \(spot.windows.count) windows; failed: \(failures.map(\.appName))")
         if failures.isEmpty {
