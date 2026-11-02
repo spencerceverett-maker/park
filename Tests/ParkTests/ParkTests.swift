@@ -216,9 +216,9 @@ import Testing
         try JSONDecoder().decode([NotionAdapter.WindowState].self, from: Data(json.utf8))
     }
 
-    private func state(_ id: String, x: Int, active: String, _ tabs: [(String, String)]) -> String {
+    private func state(_ id: String, x: Int, active: String, focus: Int = 1, _ tabs: [(String, String)]) -> String {
         let list = tabs.map { #"{"tabId":"\#($0.0)","url":"https://app.notion.com/p/team/\#($0.0)","title":"\#($0.1)"}"# }
-        return #"{"windowId":"\#(id)","displayState":{"normalBounds":{"x":\#(x),"y":100,"width":1000,"height":900}},"activeTabIdMap":{"ungrouped":"\#(active)"},"activeTabSectionId":"ungrouped","tabs":[\#(list.joined(separator: ","))]}"#
+        return #"{"windowId":"\#(id)","focusOrder":\#(focus),"displayState":{"normalBounds":{"x":\#(x),"y":100,"width":1000,"height":900}},"activeTabIdMap":{"ungrouped":"\#(active)"},"activeTabSectionId":"ungrouped","tabs":[\#(list.joined(separator: ","))]}"#
     }
 
     @Test func matchesByFrameAndActiveTitle() throws {
@@ -235,6 +235,23 @@ import Testing
         #expect(NotionAdapter.match([window(7, frame, "Something else")], saved).isEmpty)
         #expect(NotionAdapter.match([window(7, frame.offsetBy(dx: 200, dy: 0), "Alpha")], saved).isEmpty)
         #expect(NotionAdapter.match([window(7, frame, nil)], saved).isEmpty)
+    }
+
+    @Test func matchesTheLastFocusedWindowByFocusOrderWhenItsFrameIsStale() throws {
+        // Two saved windows share a copied frame and title; the one clicked last has the highest focus order.
+        let saved = try states("[" + state("old", x: 40, active: "a", focus: 3, [("a", "Alpha")]) + ","
+            + state("new", x: 40, active: "b", focus: 9, [("b", "Alpha"), ("c", "Gamma")]) + "]")
+        let here = window(7, CGRect(x: 300, y: 120, width: 1000, height: 900), "Alpha")
+        let result = NotionAdapter.match([here], saved, lastFocused: 7)
+        #expect(result[7] == .notion(tabs: [BrowserTab(url: "https://app.notion.com/p/team/b", title: "Alpha"),
+                                            BrowserTab(url: "https://app.notion.com/p/team/c", title: "Gamma")], activeIndex: 0))
+        // Not the last-focused window: the stale frame doesn't match, so it stays open.
+        #expect(NotionAdapter.match([here], saved, lastFocused: 99).isEmpty)
+    }
+
+    @Test func leavesTheLastFocusedWindowOpenWhenItsSavedTitleDiffers() throws {
+        let saved = try states("[" + state("w1", x: 40, active: "a", focus: 5, [("a", "Alpha")]) + "]")
+        #expect(NotionAdapter.match([window(7, CGRect(x: 40, y: 100, width: 1000, height: 900), "Beta")], saved, lastFocused: 7).isEmpty)
     }
 
     @Test func leavesAmbiguousWindowsOpen() throws {

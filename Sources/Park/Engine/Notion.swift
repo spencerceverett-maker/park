@@ -22,6 +22,8 @@ enum NotionAdapter {
         struct Bounds: Decodable { let x: Double, y: Double, width: Double, height: Double }
         struct Tab: Decodable { let tabId: String; let url: String; let title: String? }
         let windowId: String
+        /// Higher means focused more recently. Notion's last-focused window has the highest number.
+        let focusOrder: Int?
         let displayState: DisplayState
         let activeTabIdMap: [String: String]?
         let activeTabSectionId: String?
@@ -44,7 +46,12 @@ enum NotionAdapter {
     /// What to park for each Notion window on this desktop. A window with no entry couldn't be matched
     /// to Notion's saved state, so it stays open.
     static func capture(_ windows: [ParkableWindow]) -> [CGWindowID: ParkedWindow.Content] {
-        match(windows, readStates())
+        // The window Notion counts as its main window is the one it focused last (even in the background).
+        let lastFocused = windows.first.flatMap { window -> CGWindowID? in
+            let app = AXUIElementCreateApplication(window.pid)
+            return AX.element(app, kAXMainWindowAttribute).flatMap(AX.windowID)
+        }
+        return match(windows, readStates(), lastFocused: lastFocused)
     }
 
     static func readStates() -> [WindowState] {
@@ -53,16 +60,26 @@ enum NotionAdapter {
         return state.history.appRestorationState?.windows ?? []
     }
 
-    /// Notion saves a window only after it has had focus, and a new window starts with a copy of another
-    /// window's frame. So a window is matched only when exactly one saved window has its frame AND its
-    /// active tab's title is the window's title. Anything else stays open.
-    static func match(_ windows: [ParkableWindow], _ states: [WindowState]) -> [CGWindowID: ParkedWindow.Content] {
+    /// Notion saves a window only after it has had focus, and keeps an old frame until the window moves
+    /// (a new window starts with a copy of another window's frame). So a window is matched in one of two ways:
+    ///  - it is Notion's last-focused window, and the saved window with the highest focus order shows the
+    ///    same active tab title;
+    ///  - exactly one saved window has its frame AND shows its title as the active tab.
+    /// Anything else stays open.
+    static func match(_ windows: [ParkableWindow], _ states: [WindowState],
+                      lastFocused: CGWindowID? = nil) -> [CGWindowID: ParkedWindow.Content] {
         var result: [CGWindowID: ParkedWindow.Content] = [:]
+        let newest = states.max { ($0.focusOrder ?? .min) < ($1.focusOrder ?? .min) }
         for window in windows {
             guard let title = window.title, !title.isEmpty else { continue }
-            let candidates = states.filter { state in
-                guard state.frame.isClose(to: window.frame), let active = state.activeIndex else { return false }
-                return state.tabs[active].title == title
+            func showsTitle(_ state: WindowState) -> Bool {
+                state.activeIndex.map { state.tabs[$0].title == title } ?? false
+            }
+            let candidates: [WindowState]
+            if window.windowID == lastFocused, let newest, newest.focusOrder != nil {
+                candidates = showsTitle(newest) ? [newest] : []
+            } else {
+                candidates = states.filter { $0.frame.isClose(to: window.frame) && showsTitle($0) }
             }
             guard candidates.count == 1, let state = candidates.first, let active = state.activeIndex else { continue }
             let tabs = state.tabs.compactMap { tab -> BrowserTab? in
