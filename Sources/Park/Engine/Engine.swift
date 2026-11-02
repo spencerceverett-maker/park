@@ -111,7 +111,7 @@ final class Engine {
                 let captured = FigmaAdapter.capture(appWindows)
                 for window in appWindows {
                     switch captured[window.windowID] {
-                    case .content(.app)?: break   // only the file browser: parks as the app itself
+                    case .content(.app)?: break
                     case .content(let content)?: contents[window.windowID] = content
                     case .keepOpen(let reason)?:
                         leaveOpen.insert(window.windowID)
