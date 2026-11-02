@@ -143,9 +143,10 @@ private struct DesktopSection: View {
             .tourAnchor(.parkButton)
 
             if let error = model.errorMessage {
-                Text(error)
+                Text(SettingsLinks.linked(error))
                     .font(.system(size: 11.5))
                     .foregroundStyle(.red)
+                    .tint(.red)
                     .fixedSize(horizontal: false, vertical: true)
                     .transition(.opacity)
             }
@@ -372,5 +373,25 @@ private struct SettingsMenu: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Settings")
+    }
+}
+
+/// Turns a System Settings path named in a message into a link that opens that pane.
+enum SettingsLinks {
+    static let panes: [(phrase: String, url: String)] = [
+        ("System Settings → Privacy & Security → Automation",
+         "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"),
+        ("System Settings → Privacy & Security → Accessibility",
+         "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"),
+    ]
+
+    static func linked(_ message: String) -> AttributedString {
+        var text = AttributedString(message)
+        for pane in panes {
+            guard let range = text.range(of: pane.phrase), let url = URL(string: pane.url) else { continue }
+            text[range].link = url
+            text[range].underlineStyle = .single
+        }
+        return text
     }
 }

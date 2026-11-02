@@ -187,3 +187,19 @@ import Testing
         #expect(RelativeTime.string(for: now.addingTimeInterval(-5 * 60), now: now) == "5m ago")
     }
 }
+
+@Suite struct SettingsLinking {
+    @Test func linksTheAutomationPathInANote() {
+        let note = "Finder windows stayed open. Allow Park to control Finder in System Settings → Privacy & Security → Automation."
+        let text = SettingsLinks.linked(note)
+        let links = text.runs.compactMap { run in run.link.map { (String(text[run.range].characters), $0) } }
+        #expect(links.count == 1)
+        #expect(links.first?.0 == "System Settings → Privacy & Security → Automation")
+        #expect(links.first?.1.absoluteString.hasSuffix("Privacy_Automation") == true)
+    }
+
+    @Test func leavesOtherMessagesPlain() {
+        let text = SettingsLinks.linked("Couldn’t reopen “Agents”. It’s still here.")
+        #expect(text.runs.allSatisfy { $0.link == nil })
+    }
+}
