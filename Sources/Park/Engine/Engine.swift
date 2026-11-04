@@ -111,7 +111,7 @@ final class Engine {
                 let captured = FigmaAdapter.capture(appWindows)
                 for window in appWindows {
                     switch captured[window.windowID] {
-                    case .content(.app)?: break   // only the file browser: parks as the app itself
+                    case .content(.app)?: break
                     case .content(let content)?: contents[window.windowID] = content
                     case .keepOpen(let reason)?:
                         leaveOpen.insert(window.windowID)
@@ -129,6 +129,17 @@ final class Engine {
                 if !unmatched.isEmpty {
                     unmatched.forEach { leaveOpen.insert($0.windowID) }
                     notes.append("A Warp window stayed open because Park couldn’t read its tabs.")
+                }
+
+            case NotionAdapter.bundleID:
+                // If Notion can be quit, it brings back its own windows and tabs when it opens again.
+                if quitApps, QuitPolicy.windowsElsewhere(pid: appWindows[0].pid).isEmpty { break }
+                let captured = NotionAdapter.capture(appWindows)
+                contents.merge(captured) { $1 }
+                let unmatched = appWindows.filter { captured[$0.windowID] == nil }
+                if !unmatched.isEmpty {
+                    unmatched.forEach { leaveOpen.insert($0.windowID) }
+                    notes.append(NotionAdapter.unmatchedNote)
                 }
 
             case Finder.bundleID:
@@ -181,11 +192,13 @@ final class Engine {
                     keptApps.append(window.appName)
                     notes.append("\(window.appName) stayed open. Park can’t save its tabs yet.")
                 }
-            } else if !quitPIDs.contains(window.pid) && !Self.reopensLosslessly.contains(id) {
+            } else if !quitPIDs.contains(window.pid) && !Self.reopensAsIs(window, among: windows) {
                 leaveOpen.insert(window.windowID)
                 if !keptApps.contains(window.appName) {
                     keptApps.append(window.appName)
-                    notes.append("\(window.appName) stayed open because it’s also in use elsewhere, and Park can’t reopen that exact window.")
+                    notes.append(QuitPolicy.windowsElsewhere(pid: window.pid).isEmpty
+                        ? "\(window.appName) stayed open. Park can’t reopen each of its windows without quitting it."
+                        : "\(window.appName) stayed open because it’s also in use elsewhere, and Park can’t reopen that exact window.")
                 }
             }
         }
@@ -298,6 +311,14 @@ final class Engine {
         "com.openai.chat", "com.granola.app", "com.apple.Notes", "com.apple.reminders", "com.apple.systempreferences",
     ]
 
+    /// Closing a window and reopening its app brings back the same view only when that window is the
+    /// app's one window anywhere. With more windows, or windows on another desktop, a reopen does
+    /// nothing (the app already has a window), so the closed windows would be lost.
+    static func reopensAsIs(_ window: ParkableWindow, among windows: [ParkableWindow]) -> Bool {
+        guard let id = window.bundleID, reopensLosslessly.contains(id) else { return false }
+        return windows.filter { $0.pid == window.pid }.count == 1 && QuitPolicy.windowsElsewhere(pid: window.pid).isEmpty
+    }
+
     /// Apps with tabs or sessions Park can't capture yet. Their windows are never closed.
     static let unsupportedTabApps: Set<String> = [
         "com.apple.Safari", "org.mozilla.firefox", "com.apple.Terminal", "com.googlecode.iterm2",
@@ -405,6 +426,10 @@ final class Engine {
                 let title = Self.shortTitle(tabs[active].title)
                 if !title.isEmpty { return title }
             }
+            if case .notion(let tabs, let active) = window.content, tabs.indices.contains(active) {
+                let title = Self.shortTitle(tabs[active].title)
+                if !title.isEmpty { return title }
+            }
         }
         var seen = Set<String>()
         return NameList.string(windows.compactMap { seen.insert($0.appName).inserted ? $0.appName : nil })
@@ -465,6 +490,9 @@ final class Engine {
 
             case .terminal(let tabs, let activeIndex):
                 ok = WarpAdapter.restore(tabs: tabs, activeIndex: activeIndex)
+
+            case .notion(let tabs, let activeIndex):
+                ok = NotionAdapter.restore(tabs: tabs, activeIndex: activeIndex, frame: window.frame)
 
             case .folder(let path):
                 guard FileManager.default.fileExists(atPath: path) else { ok = false; break }
@@ -531,6 +559,7 @@ final class Engine {
 
     private func reopen(_ bundleID: String, frame: CGRect?) -> Bool {
         guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return false }
+        let wasRunning = isRunning(bundleID)
         let before = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first
             .map { Set(AX.windows(pid: $0.processIdentifier).map(\.1)) } ?? []
         let done = DispatchSemaphore(value: 0)
@@ -544,18 +573,25 @@ final class Engine {
         _ = done.wait(timeout: .now() + 15)
         guard let app = opened else { return false }
         let isNew: (AXUIElement) -> Bool = { element in AX.windowID(element).map { !before.contains($0) } ?? false }
-        if !waitForWindow(pid: app.processIdentifier, timeout: 3, where: isNew) {
+        // An app launched from scratch can take a while to draw its first window.
+        var appeared = waitForWindow(pid: app.processIdentifier, timeout: wasRunning ? 3 : 12, where: isNew)
+        if !appeared {
             // Some apps ignore reopen while running in the background; ask for a window directly.
             AXMenu.click(pid: app.processIdentifier, "File", "New Window")
+            appeared = waitForWindow(pid: app.processIdentifier, timeout: 3, where: isNew)
         }
+        // No window came back: report it, so the parked desktop is kept instead of deleted.
+        guard appeared else { return false }
         if let frame { place(pid: app.processIdentifier, frame: frame, where: isNew) }
         return true
     }
 
     /// Brings an app forward only if it has a window on this desktop, so macOS doesn't switch desktops.
+    /// Some apps list windows from every desktop in Accessibility, so check this desktop's windows.
     private func bringForward(_ bundleID: String) {
-        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first,
-              let (window, _) = AX.windows(pid: app.processIdentifier).first else { return }
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first else { return }
+        let here = Set(CurrentSpace.windows().filter { $0.pid == app.processIdentifier }.map(\.windowID))
+        guard let (window, _) = AX.windows(pid: app.processIdentifier).first(where: { here.contains($0.1) }) else { return }
         AXUIElementPerformAction(window, kAXRaiseAction as CFString)
         app.activate()
     }
