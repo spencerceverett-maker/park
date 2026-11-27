@@ -14,14 +14,18 @@ final class MenuBarHider {
     /// How long hidden icons stay visible after the panel closes, so you can reach one.
     private static let lingerDelay: TimeInterval = 2.5
 
-    private let parkButton: NSStatusBarButton
+    private static let dividerName = "ParkDivider"
+    private static let didPlaceKey = "didPlaceParkForHiding"
+
+    private let parkItem: NSStatusItem
+    private var parkButton: NSStatusBarButton { parkItem.button! }
     private var divider: NSStatusItem?
     private var collapseTimer: Timer?
 
     private(set) var isExpanded = false
 
-    init(parkButton: NSStatusBarButton) {
-        self.parkButton = parkButton
+    init(parkItem: NSStatusItem) {
+        self.parkItem = parkItem
     }
 
     var isEnabled: Bool { divider != nil }
@@ -30,9 +34,13 @@ final class MenuBarHider {
     /// so turning the feature on from the open panel shows the line to drag icons across.
     func setEnabled(_ enabled: Bool, expanded: Bool = false) {
         if enabled, divider == nil {
+            if !Defaults.bool(forKey: Self.didPlaceKey) {
+                moveParkToTheRight()
+                Defaults.set(true, forKey: Self.didPlaceKey)
+            }
             // A new status item goes to the left of the existing ones, so this lands just left of Park.
             let item = NSStatusBar.system.statusItem(withLength: Self.expandedLength)
-            item.autosaveName = "ParkDivider"
+            item.autosaveName = Self.dividerName
             item.button?.image = Self.lineImage
             item.button?.image?.accessibilityDescription = "Park: icons to the left of this line hide"
             divider = item
@@ -46,6 +54,22 @@ final class MenuBarHider {
             divider = nil
             isExpanded = false
         }
+    }
+
+    /// The first time hiding turns on, Park moves to the right end, next to the system icons, and the
+    /// divider goes just left of it. Then every other app's icon hides at once, and you drag out only
+    /// the ones you want to keep. Later moves you make are kept.
+    private func moveParkToTheRight() {
+        // macOS keeps each item's place as its distance from the right edge, in the app's defaults
+        // (always the standard domain, even in dev mode). Bigger numbers sit further left.
+        let defaults = UserDefaults.standard
+        guard let parkName = parkItem.autosaveName else { return }
+        let parkKey = "NSStatusItem Preferred Position \(parkName)"
+        parkItem.isVisible = false
+        defaults.set(CGFloat(5), forKey: parkKey)
+        defaults.set(CGFloat(10), forKey: "NSStatusItem Preferred Position \(Self.dividerName)")
+        // Showing the item again makes macOS read the new place.
+        parkItem.isVisible = true
     }
 
     /// Shows the hidden icons, for example while Park's panel is open.

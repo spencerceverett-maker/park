@@ -49,7 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel = PanelController(model: model, statusButton: statusItem.button!)
 
         // Other apps' icons hide behind Park and come back while the panel is open.
-        let hider = MenuBarHider(parkButton: statusItem.button!)
+        let hider = MenuBarHider(parkItem: statusItem)
         hider.setEnabled(model.hidesMenuBarIcons)
         model.onHidesMenuBarIconsChange = { [weak self] enabled in
             hider.setEnabled(enabled, expanded: self?.panel.isOpen ?? false)
