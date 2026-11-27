@@ -83,6 +83,17 @@ final class AppModel {
         set { withMutation(keyPath: \.quitApps) { Defaults.set(newValue, forKey: "quitApps") } }
     }
 
+    /// Hide other apps' menu bar icons behind Park. Off until you turn it on.
+    var hidesMenuBarIcons: Bool {
+        get { access(keyPath: \.hidesMenuBarIcons); return Defaults.bool(forKey: "hidesMenuBarIcons") }
+        set {
+            withMutation(keyPath: \.hidesMenuBarIcons) { Defaults.set(newValue, forKey: "hidesMenuBarIcons") }
+            onHidesMenuBarIconsChange(newValue)
+        }
+    }
+    /// Set by the app delegate to add or remove the menu bar divider.
+    @ObservationIgnored var onHidesMenuBarIconsChange: (Bool) -> Void = { _ in }
+
     private var previewTask: Task<Void, Never>?
 
     /// Bumped each time the panel opens, so views can reset transient state like keyboard selection.
