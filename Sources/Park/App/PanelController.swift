@@ -41,6 +41,9 @@ final class PanelController: NSObject, NSWindowDelegate {
     private var generation = 0
 
     var isOpen: Bool { panel.isVisible }
+    /// Called as the panel opens and closes, to show and hide the other menu bar icons.
+    var onOpen: () -> Void = {}
+    var onClose: () -> Void = {}
     /// While pinned (the guided tour), clicking elsewhere doesn't close the panel.
     var isPinned = false
     var frame: NSRect { panel.frame }
@@ -98,6 +101,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         generation += 1
         model.openCount += 1
         model.refresh()
+        onOpen()
         position()
         panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
@@ -120,6 +124,7 @@ final class PanelController: NSObject, NSWindowDelegate {
             outsideClickMonitor = nil
         }
         statusButton?.highlight(false)
+        onClose()
         let closing = generation
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.1

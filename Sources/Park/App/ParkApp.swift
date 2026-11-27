@@ -28,6 +28,7 @@ enum ParkMain {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var panel: PanelController!
+    private var hider: MenuBarHider?
     private var hotKey: HotKey?
     private var panelHotKey: HotKey?
     private let model = AppModel()
@@ -46,6 +47,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.sendAction(on: [.leftMouseDown, .rightMouseDown])
         }
         panel = PanelController(model: model, statusButton: statusItem.button!)
+
+        // Other apps' icons hide behind Park and come back while the panel is open.
+        let hider = MenuBarHider(parkItem: statusItem)
+        hider.setEnabled(model.hidesMenuBarIcons)
+        model.onHidesMenuBarIconsChange = { [weak self] enabled in
+            hider.setEnabled(enabled, expanded: self?.panel.isOpen ?? false)
+        }
+        panel.onOpen = { hider.expand() }
+        panel.onClose = { hider.collapseSoon() }
+        self.hider = hider
 
         // A menu bar app you forget to launch is no help: open at login by default.
         // Turning it off in the ··· menu is remembered and never overridden. Only from Applications:

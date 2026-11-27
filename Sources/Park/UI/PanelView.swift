@@ -355,6 +355,10 @@ private struct SettingsMenu: View {
             Toggle("Quit Apps Not Used on Other Desktops", isOn: $model.quitApps)
             Toggle("Open at Login", isOn: $launchAtLogin)
                 .onChange(of: launchAtLogin) { _, enabled in LoginItem.set(enabled) }
+            Toggle("Hide Other Menu Bar Icons", isOn: $model.hidesMenuBarIcons)
+            if model.hidesMenuBarIcons {
+                Text("Icons left of the line hide. ⌘-drag to move one.")
+            }
             Divider()
             Text("Open Park: ⌃⌥P")
             Text("Park this desktop: ⌃⌥⌘P")
