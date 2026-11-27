@@ -62,6 +62,8 @@ import Testing
                         .pane(directory: "/b", command: nil, focused: true),
                      ]))], activeIndex: 0)),
         ParkedWindow(bundleID: "com.figma.Desktop", appName: "Figma", content: .figma(files: [FigmaFile(url: "figma://file/k", title: "F")], activeIndex: 0)),
+        ParkedWindow(bundleID: "notion.id", appName: "Notion",
+                     content: .notion(tabs: [BrowserTab(url: "https://app.notion.com/p/team/Page-1", title: "Page")], activeIndex: 0)),
         ParkedWindow(bundleID: "com.apple.finder", appName: "Finder", content: .folder(path: "/tmp")),
         ParkedWindow(bundleID: "com.apple.Preview", appName: "Preview", content: .document(path: "/tmp/a.pdf")),
         ParkedWindow(bundleID: "com.tinyspeck.slackmacgap", appName: "Slack", content: .app),
@@ -201,5 +203,66 @@ import Testing
     @Test func leavesOtherMessagesPlain() {
         let text = SettingsLinks.linked("Couldn’t reopen “Agents”. It’s still here.")
         #expect(text.runs.allSatisfy { $0.link == nil })
+    }
+}
+
+@Suite struct NotionMatching {
+    private func window(_ id: CGWindowID, _ frame: CGRect, _ title: String?) -> ParkableWindow {
+        ParkableWindow(windowID: id, pid: 1, bundleID: "notion.id", appName: "Notion", frame: frame, title: title,
+                       isMinimized: false, isFullScreen: false, documentURL: nil, ax: nil)
+    }
+
+    private func states(_ json: String) throws -> [NotionAdapter.WindowState] {
+        try JSONDecoder().decode([NotionAdapter.WindowState].self, from: Data(json.utf8))
+    }
+
+    private func state(_ id: String, x: Int, active: String, focus: Int = 1, _ tabs: [(String, String)]) -> String {
+        let list = tabs.map { #"{"tabId":"\#($0.0)","url":"https://app.notion.com/p/team/\#($0.0)","title":"\#($0.1)"}"# }
+        return #"{"windowId":"\#(id)","focusOrder":\#(focus),"displayState":{"normalBounds":{"x":\#(x),"y":100,"width":1000,"height":900}},"activeTabIdMap":{"ungrouped":"\#(active)"},"activeTabSectionId":"ungrouped","tabs":[\#(list.joined(separator: ","))]}"#
+    }
+
+    @Test func matchesByFrameAndActiveTitle() throws {
+        let saved = try states("[" + state("w1", x: 40, active: "b", [("a", "Alpha"), ("b", "Beta")]) + "]")
+        let result = NotionAdapter.match([window(7, CGRect(x: 40, y: 100, width: 1000, height: 900), "Beta")], saved)
+        #expect(result[7] == .notion(tabs: [BrowserTab(url: "https://app.notion.com/p/team/a", title: "Alpha"),
+                                            BrowserTab(url: "https://app.notion.com/p/team/b", title: "Beta")], activeIndex: 1))
+    }
+
+    @Test func leavesAWindowWithAStaleOrCopiedFrameOpen() throws {
+        // A new window starts with a copy of another window's frame and isn't saved until it has focus.
+        let saved = try states("[" + state("w1", x: 40, active: "a", [("a", "Alpha")]) + "]")
+        let frame = CGRect(x: 40, y: 100, width: 1000, height: 900)
+        #expect(NotionAdapter.match([window(7, frame, "Something else")], saved).isEmpty)
+        #expect(NotionAdapter.match([window(7, frame.offsetBy(dx: 200, dy: 0), "Alpha")], saved).isEmpty)
+        #expect(NotionAdapter.match([window(7, frame, nil)], saved).isEmpty)
+    }
+
+    @Test func matchesTheLastFocusedWindowByFocusOrderWhenItsFrameIsStale() throws {
+        // Two saved windows share a copied frame and title; the one clicked last has the highest focus order.
+        let saved = try states("[" + state("old", x: 40, active: "a", focus: 3, [("a", "Alpha")]) + ","
+            + state("new", x: 40, active: "b", focus: 9, [("b", "Alpha"), ("c", "Gamma")]) + "]")
+        let here = window(7, CGRect(x: 300, y: 120, width: 1000, height: 900), "Alpha")
+        let result = NotionAdapter.match([here], saved, lastFocused: 7)
+        #expect(result[7] == .notion(tabs: [BrowserTab(url: "https://app.notion.com/p/team/b", title: "Alpha"),
+                                            BrowserTab(url: "https://app.notion.com/p/team/c", title: "Gamma")], activeIndex: 0))
+        // Not the last-focused window: the stale frame doesn't match, so it stays open.
+        #expect(NotionAdapter.match([here], saved, lastFocused: 99).isEmpty)
+    }
+
+    @Test func leavesTheLastFocusedWindowOpenWhenItsSavedTitleDiffers() throws {
+        let saved = try states("[" + state("w1", x: 40, active: "a", focus: 5, [("a", "Alpha")]) + "]")
+        #expect(NotionAdapter.match([window(7, CGRect(x: 40, y: 100, width: 1000, height: 900), "Beta")], saved, lastFocused: 7).isEmpty)
+    }
+
+    @Test func leavesAmbiguousWindowsOpen() throws {
+        let saved = try states("[" + state("w1", x: 40, active: "a", [("a", "Alpha")]) + "," + state("w2", x: 40, active: "a", [("a", "Alpha")]) + "]")
+        #expect(NotionAdapter.match([window(7, CGRect(x: 40, y: 100, width: 1000, height: 900), "Alpha")], saved).isEmpty)
+    }
+
+    @Test func buildsNotionLinksOnlyForNotionPages() {
+        #expect(NotionAdapter.deepLink("https://app.notion.com/p/team/Page-1#abc")?.absoluteString == "notion://app.notion.com/p/team/Page-1#abc")
+        #expect(NotionAdapter.deepLink("https://www.notion.so/Page", newTab: true)?.absoluteString == "notion://www.notion.so/Page?deepLinkOpenNewTab=true")
+        #expect(NotionAdapter.deepLink("https://evil.example/notion.com") == nil)
+        #expect(NotionAdapter.deepLink("javascript:alert(1)") == nil)
     }
 }

@@ -67,7 +67,8 @@ enum FigmaAdapter {
             guard candidates.count == 1, let state = candidates.first else { continue }
 
             if state.tabs.isEmpty {
-                result[window.windowID] = .content(.app)   // only the file browser
+                // Only the file browser. File ▸ New Window opens exactly that, so it reopens as an empty window.
+                result[window.windowID] = .content(.figma(files: [], activeIndex: 0))
                 continue
             }
             if state.tabs.contains(where: { $0.params.contains("localFileKey=") }) {

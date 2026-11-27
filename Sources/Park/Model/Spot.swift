@@ -39,6 +39,8 @@ struct ParkedWindow: Codable, Identifiable, Equatable, Hashable {
         case figma(files: [FigmaFile], activeIndex: Int)
         /// Terminal window: tabs, each with its split panes and working directories.
         case terminal(tabs: [TerminalTab], activeIndex: Int)
+        /// Notion window and its page tabs, in order.
+        case notion(tabs: [BrowserTab], activeIndex: Int)
         /// Finder window showing a folder.
         case folder(path: String)
         /// A document-based app window with a file open.
@@ -52,6 +54,7 @@ struct ParkedWindow: Codable, Identifiable, Equatable, Hashable {
         case .browser(let tabs, _, _): return tabs.count
         case .figma(let files, _): return files.count
         case .terminal(let tabs, _): return tabs.count
+        case .notion(let tabs, _): return tabs.count
         default: return 1
         }
     }

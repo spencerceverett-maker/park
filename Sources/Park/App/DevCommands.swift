@@ -71,6 +71,8 @@ enum DevCommands {
                 tab.layout.panes.map { pane in pane.directory + (pane.command.map { " (\($0))" } ?? "") }.joined(separator: " | ")
             }
             return head + " terminal \(tabs.count) tabs, active \(active): " + described.joined(separator: "; ")
+        case .notion(let tabs, let active):
+            return head + " notion \(tabs.count) tabs, active \(active): " + tabs.map(\.title).joined(separator: ", ")
         case .folder(let path): return head + " folder \(path)"
         case .document(let path): return head + " document \(path)"
         case .app: return head + " app"
