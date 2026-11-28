@@ -76,6 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.parkFromHotKey()
         }
 
+        Updates.shared.start()
+
         tour = GuidedTour(model: model, panel: panel)
         model.showOnboarding = { [weak self] in self?.tour.start(playIntro: false) }
         SingleInstance.listen { [weak self] in self?.panel.open() }

@@ -37,6 +37,7 @@ cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 cp Resources/Logo.png "$APP/Contents/Resources/Logo.png"
 
 # Hardened runtime and a secure timestamp are required for notarization.
+scripts/embed-sparkle.sh "$APP" "$IDENTITY" --options runtime --timestamp
 codesign --force --options runtime --timestamp --entitlements Resources/Park.entitlements --sign "$IDENTITY" "$APP"
 codesign --verify --strict --deep --verbose=2 "$APP"
 

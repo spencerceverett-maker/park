@@ -22,6 +22,7 @@ cp Resources/Info.plist "$APP/Contents/Info.plist"
 [ -f Resources/AppIcon.icns ] && cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 cp Resources/Logo.png "$APP/Contents/Resources/Logo.png"
 
+scripts/embed-sparkle.sh "$APP" "$IDENTITY" --timestamp=none
 codesign --force --timestamp=none --sign "$IDENTITY" "$APP"
 echo "Built $APP"
 
