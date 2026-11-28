@@ -367,6 +367,10 @@ private struct SettingsMenu: View {
                 model.dismissPanel()
                 model.showOnboarding()
             }
+            Button("Check for Updates…") {
+                model.dismissPanel()
+                Updates.shared.checkNow()
+            }
             Divider()
             Button("Quit Park") { NSApp.terminate(nil) }
                 .keyboardShortcut("q")

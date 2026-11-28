@@ -26,5 +26,9 @@
 	<string>Park reads the tabs and folders in your windows so it can reopen them exactly where you left off.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/spencerceverett-maker/park/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>++rF2gobMHVbVv1Ute9lwgcajMmsjl0PiRAjW/AqnN4=</string>
 </dict>
 </plist>
